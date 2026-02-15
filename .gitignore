@@ -206,5 +206,4 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 .kiro/settings
-.kiro/specs/autonomous-pricing-engine/system-flowchart.md
 .kiro/specs/autonomous-pricing-engine/architecture
