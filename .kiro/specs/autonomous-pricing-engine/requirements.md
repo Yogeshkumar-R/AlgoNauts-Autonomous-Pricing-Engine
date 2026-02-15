@@ -70,27 +70,43 @@ The system SHALL operate as an autonomous retail pricing operator that executes 
 
 ### 2.3 Decision Reasoning
 
-**REQ-PD-009**: The system SHALL generate natural language reasoning for every pricing decision explaining trigger, analysis, and expected outcome.
+**REQ-PD-009**: The system SHALL generate natural language reasoning for every pricing decision explaining trigger, analysis, and expected outcome using AI-powered language models (e.g., Amazon Bedrock, OpenAI API).
 
-**REQ-PD-010**: The system SHALL include competitor context in reasoning (e.g., "Competitor C456 dropped price 10% to ₹900").
+**REQ-PD-010**: The system SHALL include competitor context in reasoning (e.g., "Competitor C456 dropped price 10% to ₹900, likely clearing inventory before festival season").
 
 **REQ-PD-011**: The system SHALL explain trade-offs between scenarios (e.g., "Aggressive pricing gains market share but reduces margin by 5%").
 
+**REQ-PD-012**: The system SHALL generate reasoning that is human-readable, contextually relevant, and includes specific numerical justifications for pricing decisions.
+
+**REQ-PD-013**: The system SHALL store both the structured decision data (price, confidence, expected impact) and the AI-generated natural language explanation in decision logs.
+
 ### 2.4 Margin Constraint Enforcement
 
-**REQ-PD-012**: The system SHALL enforce minimum margin constraints (configurable per product, default 25%).
+**REQ-PD-014**: The system SHALL enforce minimum margin constraints (configurable per product, default 25%).
 
-**REQ-PD-013**: The system SHALL never recommend prices below: base_cost + GST + platform_fees + minimum_margin.
+**REQ-PD-015**: The system SHALL never recommend prices below: base_cost + GST + platform_fees + minimum_margin.
 
-**REQ-PD-014**: The system SHALL reject pricing decisions that violate margin constraints and log rejection reason.
+**REQ-PD-016**: The system SHALL reject pricing decisions that violate margin constraints and log rejection reason with AI-generated explanation of why the decision was unsafe.
 
 ### 2.5 GST Compliance
 
-**REQ-PD-015**: The system SHALL calculate GST-inclusive prices for all pricing decisions using correct GST rate for each product.
+**REQ-PD-017**: The system SHALL calculate GST-inclusive prices for all pricing decisions using correct GST rate for each product.
 
-**REQ-PD-016**: The system SHALL store both GST-exclusive and GST-inclusive prices in decision logs.
+**REQ-PD-018**: The system SHALL store both GST-exclusive and GST-inclusive prices in decision logs.
 
-**REQ-PD-017**: The system SHALL round GST-inclusive prices to nearest rupee for customer-facing display.
+**REQ-PD-019**: The system SHALL round GST-inclusive prices to nearest rupee for customer-facing display.
+
+### 2.6 AI/ML Integration
+
+**REQ-PD-020**: The system SHALL integrate with AI language models (Amazon Bedrock, OpenAI API, or equivalent) for generating natural language reasoning.
+
+**REQ-PD-021**: The system SHALL handle AI service failures gracefully by falling back to template-based reasoning when AI services are unavailable.
+
+**REQ-PD-022**: The system SHALL use machine learning models (simple regression, decision trees, or rule-based elasticity) for demand prediction.
+
+**REQ-PD-023**: The system SHALL log AI model responses including model version, prompt used, and response latency for debugging and audit purposes.
+
+**REQ-PD-024**: The system SHALL validate AI-generated reasoning for completeness (minimum 50 characters, includes numerical justification) before storing in decision logs.
 
 ## 3. Execution Requirements
 
@@ -182,35 +198,39 @@ The system SHALL operate as an autonomous retail pricing operator that executes 
 
 ### 5.2 Root Cause Analysis
 
-**REQ-CR-005**: The system SHALL analyze root cause of underperformance by checking: further competitor price changes, demand shifts, inventory issues, and model prediction errors.
+**REQ-CR-005**: The system SHALL analyze root cause of underperformance by checking: further competitor price changes, demand shifts, inventory issues, and model prediction errors using AI-powered analysis.
 
 **REQ-CR-006**: The system SHALL classify root cause into categories: competitor_response, demand_shift, pricing_error, external_shock.
 
-**REQ-CR-007**: The system SHALL log root cause analysis with supporting evidence (competitor prices, sales data, market conditions).
+**REQ-CR-007**: The system SHALL log root cause analysis with supporting evidence (competitor prices, sales data, market conditions) and AI-generated natural language explanation.
+
+**REQ-CR-008**: The system SHALL use AI language models to generate detailed root cause narratives explaining why the original decision underperformed and what market conditions changed.
 
 ### 5.3 Corrective Strategy Generation
 
-**REQ-CR-008**: The system SHALL generate corrective pricing strategy based on root cause (e.g., if competitor dropped further, reduce price to match).
+**REQ-CR-009**: The system SHALL generate corrective pricing strategy based on root cause (e.g., if competitor dropped further, reduce price to match) with AI-generated reasoning.
 
-**REQ-CR-009**: The system SHALL calculate expected recovery impact (revenue, margin, sales) from corrective strategy.
+**REQ-CR-010**: The system SHALL calculate expected recovery impact (revenue, margin, sales) from corrective strategy.
 
-**REQ-CR-010**: The system SHALL assign confidence score to corrective strategy using same methodology as initial decisions.
+**REQ-CR-011**: The system SHALL assign confidence score to corrective strategy using same methodology as initial decisions.
+
+**REQ-CR-012**: The system SHALL link corrective decisions to original decision_id in both structured data and AI-generated narratives to maintain decision chain context.
 
 ### 5.4 Automatic Re-execution
 
-**REQ-CR-011**: The system SHALL submit corrective pricing decision to Supervisor Agent for guardrail validation and execution.
+**REQ-CR-013**: The system SHALL submit corrective pricing decision to Supervisor Agent for guardrail validation and execution.
 
-**REQ-CR-012**: The system SHALL execute corrective strategy within 2 hours of detecting underperformance for critical issues.
+**REQ-CR-014**: The system SHALL execute corrective strategy within 2 hours of detecting underperformance for critical issues.
 
-**REQ-CR-013**: The system SHALL link corrective decision to original decision_id to maintain decision chain traceability.
+**REQ-CR-015**: The system SHALL link corrective decision to original decision_id to maintain decision chain traceability.
 
 ### 5.5 Correction Limits
 
-**REQ-CR-014**: The system SHALL limit corrections to maximum 3 attempts per product per 24-hour period to prevent oscillation.
+**REQ-CR-016**: The system SHALL limit corrections to maximum 3 attempts per product per 24-hour period to prevent oscillation.
 
-**REQ-CR-015**: The system SHALL escalate to human review if 3 correction attempts fail to improve performance.
+**REQ-CR-017**: The system SHALL escalate to human review if 3 correction attempts fail to improve performance.
 
-**REQ-CR-016**: The system SHALL pause autonomous pricing for a product after repeated correction failures until human intervention.
+**REQ-CR-018**: The system SHALL pause autonomous pricing for a product after repeated correction failures until human intervention.
 
 ## 6. Guardrail and Safety Requirements
 
@@ -378,17 +398,21 @@ The system SHALL operate as an autonomous retail pricing operator that executes 
 
 **REQ-PC-011**: The system SHALL provide basic monitoring dashboard (no production-grade UI with authentication).
 
-**REQ-PC-012**: The system SHALL use rule-based and heuristic pricing strategies (no deep learning models required).
+**REQ-PC-012**: The system SHALL use AI language models for reasoning generation and simple ML models (regression, decision trees) or rule-based heuristics for demand prediction (no deep learning models required).
 
 **REQ-PC-013**: The system SHALL process pricing decisions in batch mode (15-minute intervals acceptable, no real-time streaming required).
 
+**REQ-PC-014**: The system SHALL integrate with AI services (Amazon Bedrock, OpenAI API, or equivalent) for natural language generation, with graceful fallback to template-based reasoning if AI services are unavailable.
+
 ### 9.5 Demonstration Requirements
 
-**REQ-PC-014**: The system SHALL include pre-configured demo scenario showing: market change detection → autonomous pricing decision → execution → monitoring → self-correction.
+**REQ-PC-015**: The system SHALL include pre-configured demo scenario showing: market change detection → autonomous pricing decision with AI reasoning → execution → monitoring → self-correction with AI root cause analysis.
 
-**REQ-PC-015**: The system SHALL complete full decision lifecycle (detection to correction) within 10 minutes for demo purposes.
+**REQ-PC-016**: The system SHALL complete full decision lifecycle (detection to correction) within 10 minutes for demo purposes.
 
-**REQ-PC-016**: The system SHALL provide setup documentation enabling system deployment in <30 minutes.
+**REQ-PC-017**: The system SHALL provide setup documentation enabling system deployment in <30 minutes.
+
+**REQ-PC-018**: The system SHALL demonstrate visible AI components including natural language reasoning generation and demand prediction in the demo scenario.
 
 ## 10. Success Criteria
 
