@@ -1,0 +1,7 @@
+{
+  "product_id": "PROD-001",
+  "competitor_price": 599.00,
+  "demand_factor": 1.2,
+  "market_trend": "increasing",
+  "source": "market_analytics"
+}

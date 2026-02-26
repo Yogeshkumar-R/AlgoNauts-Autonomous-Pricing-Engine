@@ -1,0 +1,348 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Autonomous Pricing Engine - Serverless Event-Driven Pricing System
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Architectures:
+      - x86_64
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        PRODUCTS_TABLE: !Ref ProductsTable
+        DECISIONS_TABLE: !Ref DecisionsTable
+        CORRECTIONS_TABLE: !Ref CorrectionsTable
+        MIN_MARGIN_PERCENT: '5.0'
+        MAX_PRICE_DROP_PERCENT: '25.0'
+        DEVIATION_THRESHOLD_PERCENT: '20.0'
+        BEDROCK_MODEL_ID: 'anthropic.claude-3-sonnet-20240229-v1:0'
+        BEDROCK_REGION: !Ref AWS::Region
+    LoggingConfig:
+      LogFormat: JSON
+
+Resources:
+  # DynamoDB Tables
+  ProductsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: autonomous-pricing-products
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: product_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: product_id
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  DecisionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: autonomous-pricing-decisions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: decision_id
+          AttributeType: S
+        - AttributeName: product_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: decision_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ProductTimestampIndex
+          KeySchema:
+            - AttributeName: product_id
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  CorrectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: autonomous-pricing-corrections
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: correction_id
+          AttributeType: S
+        - AttributeName: product_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: correction_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ProductIndex
+          KeySchema:
+            - AttributeName: product_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  # Lambda Functions
+  MarketProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: autonomous-pricing-market-processor
+      CodeUri: market_processor/
+      Handler: handler.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ProductsTable
+      Events:
+        MarketDataEvent:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - autonomous-pricing.market
+            RuleName: market-processor-rule
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt MarketDataQueue.Arn
+            BatchSize: 10
+
+  PricingEngineFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: autonomous-pricing-pricing-engine
+      CodeUri: pricing_engine/
+      Handler: handler.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ProductsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DecisionsTable
+      Events:
+        PricingRequest:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - autonomous-pricing.engine
+            RuleName: pricing-engine-rule
+
+  GuardrailExecutorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: autonomous-pricing-guardrail-executor
+      CodeUri: guardrail_executor/
+      Handler: handler.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DecisionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ProductsTable
+        - DynamoDBUpdatePolicy:
+            TableName: !Ref DecisionsTable
+      Events:
+        GuardrailValidation:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - autonomous-pricing.guardrail
+            RuleName: guardrail-executor-rule
+
+  MonitoringAgentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: autonomous-pricing-monitoring-agent
+      CodeUri: monitoring_agent/
+      Handler: handler.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ProductsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref DecisionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CorrectionsTable
+        - DynamoDBUpdatePolicy:
+            TableName: !Ref DecisionsTable
+      Events:
+        ScheduledMonitoring:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+            Input: |
+              {
+                "trigger_type": "scheduled",
+                "batch_size": 100
+              }
+
+  CorrectionAgentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: autonomous-pricing-correction-agent
+      CodeUri: correction_agent/
+      Handler: handler.lambda_handler
+      MemorySize: 512
+      Timeout: 60
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ProductsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref DecisionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CorrectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DecisionsTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
+      Events:
+        CorrectionEvent:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - autonomous-pricing.correction
+            RuleName: correction-agent-rule
+
+  # AI Interface - The "face" of the AI Pricing Manager
+  AIInterfaceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: autonomous-pricing-ai-interface
+      CodeUri: ai_interface/
+      Handler: handler.lambda_handler
+      MemorySize: 512
+      Timeout: 60
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ProductsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref DecisionsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref CorrectionsTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
+      Events:
+        APIEvent:
+          Type: HttpApi
+          Properties:
+            Path: /ai/{query_type}
+            Method: POST
+        DailySummarySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 8 * * ? *)  # Daily at 8 AM
+            Input: |
+              {
+                "query_type": "daily_summary",
+                "seller_id": "ALL"
+              }
+
+  # API Gateway for AI Interface
+  PricingAPI:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: Autonomous-Pricing-API
+      CorsConfiguration:
+        AllowMethods:
+          - POST
+          - GET
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+        AllowOrigins:
+          - "*"
+
+  # SQS Queues
+  MarketDataQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: autonomous-pricing-market-data-queue
+      VisibilityTimeout: 60
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt MarketDataDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  MarketDataDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: autonomous-pricing-market-data-dlq
+
+  # EventBridge Event Bus
+  PricingEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: autonomous-pricing-event-bus
+
+  # IAM Role for Bedrock access (for correction agent)
+  BedrockAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: autonomous-pricing-bedrock-access
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BedrockInvokePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: '*'
+
+Outputs:
+  ProductsTableName:
+    Description: Products DynamoDB Table Name
+    Value: !Ref ProductsTable
+
+  DecisionsTableName:
+    Description: Decisions DynamoDB Table Name
+    Value: !Ref DecisionsTable
+
+  CorrectionsTableName:
+    Description: Corrections DynamoDB Table Name
+    Value: !Ref CorrectionsTable
+
+  MarketProcessorFunctionArn:
+    Description: Market Processor Lambda Function ARN
+    Value: !GetAtt MarketProcessorFunction.Arn
+
+  PricingEngineFunctionArn:
+    Description: Pricing Engine Lambda Function ARN
+    Value: !GetAtt PricingEngineFunction.Arn
+
+  GuardrailExecutorFunctionArn:
+    Description: Guardrail Executor Lambda Function ARN
+    Value: !GetAtt GuardrailExecutorFunction.Arn
+
+  MonitoringAgentFunctionArn:
+    Description: Monitoring Agent Lambda Function ARN
+    Value: !GetAtt MonitoringAgentFunction.Arn
+
+  CorrectionAgentFunctionArn:
+    Description: Correction Agent Lambda Function ARN
+    Value: !GetAtt CorrectionAgentFunction.Arn
+
+  AIInterfaceFunctionArn:
+    Description: AI Interface Lambda Function ARN
+    Value: !GetAtt AIInterfaceFunction.Arn
+
+  PricingAPIEndpoint:
+    Description: API Gateway Endpoint URL
+    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
+
+  PricingEventBusName:
+    Description: Pricing Event Bus Name
+    Value: !Ref PricingEventBus
