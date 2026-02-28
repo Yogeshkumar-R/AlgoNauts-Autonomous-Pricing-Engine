@@ -1,0 +1,261 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IAM Roles for Autonomous Pricing Engine Team Members
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: autonomous-pricing
+    Description: Project name prefix for resources
+
+Resources:
+
+  # ============================================
+  # DEVELOPER ROLE
+  # Can deploy, update Lambda, DynamoDB, API Gateway
+  # Cannot delete resources or modify IAM
+  # ============================================
+  DeveloperRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-developer'
+      Description: Developer role for Autonomous Pricing Engine team
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        - PolicyName: BedrockInvokeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:ListFoundationModels
+                  - bedrock:GetFoundationModel
+                Resource: '*'
+        - PolicyName: SAMDeployAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:GetTemplate
+                Resource: !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}*/*'
+              - Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource: '*'
+        - PolicyName: NoDeleteRestriction
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Deny
+                Action:
+                  - cloudformation:DeleteStack
+                  - lambda:DeleteFunction
+                  - dynamodb:DeleteTable
+                  - apigateway:DELETE
+                  - s3:DeleteBucket
+                  - iam:DeleteRole
+                  - iam:DeletePolicy
+                  - iam:DetachRolePolicy
+                  - iam:AttachRolePolicy
+                Resource: '*'
+
+  # ============================================
+  # VIEWER ROLE
+  # Read-only access for stakeholders/reviewers
+  # ============================================
+  ViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-viewer'
+      Description: Read-only access to Autonomous Pricing Engine
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ReadOnlyAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:ListFunctions
+                  - dynamodb:DescribeTable
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:ListTables
+                  - apigateway:GET
+                  - apigateway:HEAD
+                  - events:DescribeRule
+                  - events:ListRules
+                  - sqs:GetQueueAttributes
+                  - sqs:ListQueues
+                  - cloudwatch:DescribeLogGroups
+                  - cloudwatch:DescribeLogStreams
+                  - cloudwatch:GetLogEvents
+                  - logs:GetLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:GetTemplate
+                Resource: '*'
+        - PolicyName: BedrockReadOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:ListFoundationModels
+                  - bedrock:GetFoundationModel
+                Resource: '*'
+
+  # ============================================
+  # ADMIN ROLE
+  # Full access to project resources including delete
+  # Use with caution - for team leads only
+  # ============================================
+  AdminRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-admin'
+      Description: Full admin access to Autonomous Pricing Engine
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      Policies:
+        - PolicyName: BedrockFullAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:*
+                Resource: '*'
+
+  # ============================================
+  # DEPLOYMENT SERVICE ROLE
+  # Used by SAM/CloudFormation for deployments
+  # ============================================
+  DeploymentServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-deployment-role'
+      Description: Service role for SAM deployments
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - cloudformation.amazonaws.com
+                - lambda.amazonaws.com
+                - apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator
+        - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        - PolicyName: BedrockInvokeForDeployment
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:ListFoundationModels
+                  - bedrock:GetFoundationModel
+                Resource: '*'
+        - PolicyName: IAMCreateForDeployment
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PassRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ProjectName}*'
+              - Effect: Allow
+                Action:
+                  - iam:CreatePolicy
+                  - iam:DeletePolicy
+                  - iam:GetPolicy
+                  - iam:ListPolicyVersions
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:policy/${ProjectName}*'
+
+Outputs:
+  DeveloperRoleArn:
+    Description: ARN for Developer Role
+    Value: !GetAtt DeveloperRole.Arn
+
+  ViewerRoleArn:
+    Description: ARN for Viewer Role
+    Value: !GetAtt ViewerRole.Arn
+
+  AdminRoleArn:
+    Description: ARN for Admin Role
+    Value: !GetAtt AdminRole.Arn
+
+  DeploymentRoleArn:
+    Description: ARN for Deployment Service Role
+    Value: !GetAtt DeploymentServiceRole.Arn
+
+  DeveloperAssumeCommand:
+    Description: Command to assume developer role
+    Value: !Sub 'aws sts assume-role --role-arn ${DeveloperRole.Arn} --role-session-name developer-session'
+
+  ViewerAssumeCommand:
+    Description: Command to assume viewer role
+    Value: !Sub 'aws sts assume-role --role-arn ${ViewerRole.Arn} --role-session-name viewer-session'
+
+  AdminAssumeCommand:
+    Description: Command to assume admin role
+    Value: !Sub 'aws sts assume-role --role-arn ${AdminRole.Arn} --role-session-name admin-session'

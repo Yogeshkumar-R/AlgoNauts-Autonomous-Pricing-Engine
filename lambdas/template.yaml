@@ -19,6 +19,8 @@ Globals:
         DEVIATION_THRESHOLD_PERCENT: '20.0'
         BEDROCK_MODEL_ID: 'anthropic.claude-3-sonnet-20240229-v1:0'
         BEDROCK_REGION: !Ref AWS::Region
+        EVENT_BUS_NAME: !Ref PricingEventBus
+        SQS_QUEUE_URL: !Ref MarketDataQueue
     LoggingConfig:
       LogFormat: JSON
 
@@ -244,6 +246,74 @@ Resources:
                 "seller_id": "ALL"
               }
 
+  # ========================================
+  # DATA INGESTION API - Entry point for external data
+  # ========================================
+  IngestionAPIFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: autonomous-pricing-ingestion-api
+      CodeUri: ingestion_api/
+      Handler: handler.lambda_handler
+      MemorySize: 256
+      Timeout: 30
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt MarketDataQueue.QueueName
+        - Statement:
+            Effect: Allow
+            Action:
+              - events:PutEvents
+            Resource: !GetAtt PricingEventBus.Arn
+      Events:
+        IngestMarketData:
+          Type: HttpApi
+          Properties:
+            Path: /ingest/market-data
+            Method: POST
+        IngestBatch:
+          Type: HttpApi
+          Properties:
+            Path: /ingest/batch
+            Method: POST
+
+  # ========================================
+  # DATA SIMULATOR - For demos and testing
+  # ========================================
+  DataSimulatorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: autonomous-pricing-data-simulator
+      CodeUri: data_simulator/
+      Handler: handler.lambda_handler
+      MemorySize: 256
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ProductsTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - events:PutEvents
+            Resource: !GetAtt PricingEventBus.Arn
+      Events:
+        # Run simulation every 15 minutes for demo
+        ScheduledSimulation:
+          Type: Schedule
+          Properties:
+            Schedule: rate(15 minutes)
+            Input: |
+              {
+                "mode": "batch",
+                "event_type": "normal"
+              }
+        # API trigger for on-demand simulation (for demos)
+        SimulateAPI:
+          Type: HttpApi
+          Properties:
+            Path: /simulate/{mode}
+            Method: POST
+
   # API Gateway for AI Interface
   PricingAPI:
     Type: AWS::Serverless::HttpApi
@@ -339,6 +409,14 @@ Outputs:
     Description: AI Interface Lambda Function ARN
     Value: !GetAtt AIInterfaceFunction.Arn
 
+  IngestionAPIFunctionArn:
+    Description: Data Ingestion API Lambda Function ARN
+    Value: !GetAtt IngestionAPIFunction.Arn
+
+  DataSimulatorFunctionArn:
+    Description: Data Simulator Lambda Function ARN
+    Value: !GetAtt DataSimulatorFunction.Arn
+
   PricingAPIEndpoint:
     Description: API Gateway Endpoint URL
     Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
@@ -346,3 +424,20 @@ Outputs:
   PricingEventBusName:
     Description: Pricing Event Bus Name
     Value: !Ref PricingEventBus
+
+  MarketDataQueueUrl:
+    Description: SQS Queue URL for Market Data
+    Value: !Ref MarketDataQueue
+
+  # API Endpoints for easy reference
+  IngestMarketDataEndpoint:
+    Description: Endpoint to ingest market data
+    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/ingest/market-data'
+
+  SimulateEndpoint:
+    Description: Endpoint to trigger data simulation
+    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/simulate/single'
+
+  AIQueryEndpoint:
+    Description: Endpoint for AI queries
+    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/ai/query'
