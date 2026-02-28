@@ -345,19 +345,3 @@ sam local invoke AIInterfaceFunction -e events/ai_interface_query_event.json
 ```
 
 ---
-
-## Why This Wins Hackathons
-
-| Criteria | How We Meet It |
-|----------|----------------|
-| **AI is central** | ✅ AI orchestrates, explains, corrects |
-| **Cost efficient** | ✅ Only 17 LLM calls/day for full system |
-| **Real-world ready** | ✅ Small sellers can afford ₹25/month |
-| **End-to-end working** | ✅ 6 Lambdas, 3 tables, API Gateway |
-| **Innovative** | ✅ Hybrid deterministic + AI approach |
-
----
-
-## License
-
-MIT License
