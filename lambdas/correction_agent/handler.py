@@ -12,9 +12,10 @@ import os
 
 import boto3
 from botocore.exceptions import ClientError
+from langsmith import traceable
 
 # Add shared module to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from shared import (
     DynamoDBClient,
@@ -111,6 +112,11 @@ Respond in JSON format with the following structure:
     return prompt
 
 
+@traceable(
+    name="bedrock-claude-correction",
+    tags=["bedrock", "correction", "pricing"],
+    metadata={"model": "claude-haiku-4-5"}
+)
 def call_bedrock_claude(prompt: str) -> Dict[str, Any]:
     """
     Call AWS Bedrock Claude model for analysis.
@@ -308,7 +314,7 @@ def run_correction(event: Dict[str, Any]) -> Dict[str, Any]:
             'retry_count': correction.get('retry_count', 0) + 1
         }
 
-        # Update correction record
+        # Update correction record with completed status (fix: #status reserved word)
         db_client.update_item(
             CORRECTIONS_TABLE,
             {'correction_id': correction_id},
@@ -321,7 +327,8 @@ def run_correction(event: Dict[str, Any]) -> Dict[str, Any]:
                 ':source': ai_analysis_source,
                 ':analysis': ai_response,
                 ':retry': correction_update['retry_count']
-            }
+            },
+            expression_attribute_names={'#status': 'status'}
         )
 
         # If AI provided a revised price, create new decision
@@ -400,45 +407,24 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     AWS Lambda entry point for correction agent.
 
-    Args:
-        event: Lambda event payload
-        context: Lambda context
-
-    Returns:
-        JSON response with correction result
+    Accepts:
+    - Step Functions (_sf_mode: true) — returns clean dict with ai_revised_price
+    - EventBridge / Direct — returns HTTP response
     """
-    logger.info(f"Correction agent invoked with event: {json.dumps(event, default=str)}")
+    logger.info(f"Correction agent invoked: {json.dumps(event, default=str)[:300]}")
+
+    sf_mode = event.get('_sf_mode', False)
 
     try:
-        # Handle different event sources
-        if 'Records' in event:
-            # Batch processing
-            results = []
-            for record in event['Records']:
-                if 'body' in record:
-                    body = json.loads(record['body'])
-                elif 'kinesis' in record:
-                    body = json.loads(record['kinesis']['data'])
-                else:
-                    body = record
-
-                result = run_correction(body)
-                results.append(result)
-
-            return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'processed': len(results),
-                    'results': results
-                }, default=str)
-            }
-
-        elif 'detail' in event:
-            # EventBridge event
+        if 'detail' in event:
             result = run_correction(event['detail'])
         else:
-            # Direct invocation
             result = run_correction(event)
+
+        if sf_mode:
+            if result.get('status') == STATUS_FAILED:
+                raise Exception(result.get('error', 'correction_agent failed'))
+            return result
 
         return {
             'statusCode': 200 if result['status'] == STATUS_SUCCESS else 400,
@@ -447,6 +433,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     except Exception as e:
         logger.exception(f"Lambda handler error: {e}")
+        if sf_mode:
+            raise
         return {
             'statusCode': 500,
             'body': json.dumps({

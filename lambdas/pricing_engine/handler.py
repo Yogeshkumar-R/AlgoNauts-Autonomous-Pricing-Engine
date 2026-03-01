@@ -6,13 +6,14 @@ based on cost, competition, demand, and margin requirements.
 """
 
 import json
+import boto3
 from typing import Any, Dict
 import sys
 import os
 import math
 
 # Add shared module to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from shared import (
     DynamoDBClient,
@@ -30,6 +31,15 @@ from shared import (
 
 logger = setup_logger(__name__)
 db_client = DynamoDBClient()
+
+# EventBridge client (lazy init)
+_eventbridge = None
+
+def get_eventbridge():
+    global _eventbridge
+    if _eventbridge is None:
+        _eventbridge = boto3.client('events', region_name=os.environ.get('BEDROCK_REGION', 'us-east-1'))
+    return _eventbridge
 
 
 def calculate_recommended_price(
@@ -121,7 +131,7 @@ def calculate_recommended_price(
     }
 
 
-def run_pricing_engine(event: Dict[str, Any]) -> Dict[str, Any]:
+def run_pricing_engine(event: Dict[str, Any], trigger_next: bool = True) -> Dict[str, Any]:
     """
     Execute pricing engine logic for a product.
 
@@ -210,6 +220,24 @@ def run_pricing_engine(event: Dict[str, Any]) -> Dict[str, Any]:
 
         logger.info(f"Generated pricing decision {decision_id} for product {product_id}")
 
+        # In Step Functions mode, orchestration already calls the next stage.
+        if trigger_next:
+            try:
+                event_bus = os.environ.get('EVENT_BUS_NAME', 'autonomous-pricing-event-bus')
+                get_eventbridge().put_events(Entries=[{
+                    'Source': 'autonomous-pricing.guardrail',
+                    'DetailType': 'pricing_decision_ready',
+                    'Detail': json.dumps({
+                        'decision_id': decision_id,
+                        'product_id': product_id,
+                        'auto_apply': True
+                    }),
+                    'EventBusName': event_bus
+                }])
+                logger.info(f"Triggered guardrail for decision {decision_id}")
+            except Exception as eb_err:
+                logger.warning(f"EventBridge trigger failed (non-fatal): {eb_err}")
+
         return {
             'status': STATUS_SUCCESS,
             'decision_id': decision_id,
@@ -246,45 +274,38 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     AWS Lambda entry point for pricing engine.
 
-    Args:
-        event: Lambda event payload
-        context: Lambda context
-
-    Returns:
-        JSON response with pricing decision
+    Accepts events from:
+    - Step Functions (_sf_mode: true) — returns clean dict with decision_id
+    - EventBridge (detail key present) — returns HTTP response
+    - HTTP API / Direct invocation — returns HTTP response
     """
-    logger.info(f"Pricing engine invoked with event: {json.dumps(event, default=str)}")
+    logger.info(f"Pricing engine invoked: {json.dumps(event, default=str)[:300]}")
 
     try:
-        # Handle different event sources
+        sf_mode = bool(event.get('_sf_mode', False))
+
         if 'Records' in event:
-            # Batch processing
             results = []
             for record in event['Records']:
-                if 'body' in record:
-                    body = json.loads(record['body'])
-                elif 'kinesis' in record:
-                    body = json.loads(record['kinesis']['data'])
-                else:
-                    body = record
-
-                result = run_pricing_engine(body)
-                results.append(result)
-
+                body = json.loads(record['body']) if 'body' in record else record
+                results.append(run_pricing_engine(body, trigger_next=True))
             return {
                 'statusCode': 200,
-                'body': json.dumps({
-                    'processed': len(results),
-                    'results': results
-                }, default=str)
+                'body': json.dumps({'processed': len(results), 'results': results}, default=str)
             }
 
         elif 'detail' in event:
-            # EventBridge event
-            result = run_pricing_engine(event['detail'])
+            detail = event['detail']
+            sf_mode = bool(sf_mode or detail.get('_sf_mode', False))
+            result = run_pricing_engine(detail, trigger_next=not sf_mode)
         else:
-            # Direct invocation
-            result = run_pricing_engine(event)
+            result = run_pricing_engine(event, trigger_next=not sf_mode)
+
+        # Step Functions mode — return clean dict
+        if sf_mode:
+            if result.get('status') != STATUS_SUCCESS:
+                raise Exception(result.get('error', 'pricing_engine failed'))
+            return result
 
         return {
             'statusCode': 200 if result['status'] == STATUS_SUCCESS else 400,
@@ -293,6 +314,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     except Exception as e:
         logger.exception(f"Lambda handler error: {e}")
+        if sf_mode:
+            raise
         return {
             'statusCode': 500,
             'body': json.dumps({

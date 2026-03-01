@@ -207,3 +207,22 @@ marimo/_lsp/
 __marimo__/
 .kiro/settings
 .kiro/specs/autonomous-pricing-engine/architecture
+
+# ─── AWS SAM / Project Secrets ──────────────────────────────────────────────
+lambdas/env_config.json
+lambdas/samconfig.toml
+samconfig.toml
+lambdas/.aws-sam/
+.aws-sam/
+
+# Local test/debug artifacts
+anthropic_body.json
+bedrock_body.json
+llama_body.json
+bedrock_out.json
+llama_out.json
+nova_out.json
+quotas.json
+eav.json
+ean.json
+bedrock_marketplace_policy.json

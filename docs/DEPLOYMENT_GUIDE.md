@@ -1,273 +1,182 @@
-# AWS Deployment Guide - Autonomous Pricing Engine
+# AWS Deployment Guide - Manual Operator Control
 
-## Prerequisites
+This runbook is intentionally **manual-first**.
+From now on, **you execute every command**. No background agent, bot, or automation should deploy, update, or delete infrastructure unless you explicitly run it.
 
-1. **AWS CLI installed and configured**
-   ```bash
-   aws configure
-   # Enter your access key, secret key, region (recommend ap-south-1 for India)
-   # Output format: json
-   ```
+## Control Policy
 
-2. **SAM CLI installed**
-   ```bash
-   # Windows (using pip)
-   pip install aws-sam-cli
-
-   # Verify installation
-   sam --version
-   ```
-
-3. **Python 3.11+ installed**
+- All infra/app changes are command-by-command and operator-approved.
+- No unattended deploy scripts.
+- No automatic rollouts.
+- No destructive commands (`delete-stack`, `sam delete`, table drops) without explicit manual confirmation.
 
 ---
 
-## Step 1: Deploy IAM Roles for Team Members
+## Prerequisites
 
-From the `infrastructure` directory:
+1. AWS CLI configured for your account:
+```bash
+aws configure
+# Region: us-east-1
+# Output: json
+```
+
+2. SAM CLI installed:
+```bash
+sam --version
+```
+
+3. Python 3.11+ installed.
+
+4. Bedrock model access enabled in **us-east-1** for:
+- `anthropic.claude-haiku-4-5-20251001-v1:0`
+
+---
+
+## Step 1: Deploy IAM Stack (Manual)
+
+From `infrastructure`:
 
 ```bash
 cd D:\Projects\AI for Bharath\AlgoNauts-Autonomous-Pricing-Engine\infrastructure
 
-# Deploy the IAM roles stack
 aws cloudformation deploy \
   --template-file team-iam-roles.yaml \
   --stack-name autonomous-pricing-roles \
   --capabilities CAPABILITY_NAMED_IAM \
-  --region ap-south-1
-```
-
-**Output:** This creates 3 roles:
-- `autonomous-pricing-developer` - For developers (deploy, update, no delete)
-- `autonomous-pricing-viewer` - Read-only access
-- `autonomous-pricing-admin` - Full access (for team lead)
-
-### For Team Members to Assume Roles
-
-```bash
-# Developer role
-aws sts assume-role \
-  --role-arn arn:aws:iam::<ACCOUNT_ID>:role/autonomous-pricing-developer \
-  --role-session-name dev-session
-
-# Viewer role
-aws sts assume-role \
-  --role-arn arn:aws:iam::<ACCOUNT_ID>:role/autonomous-pricing-viewer \
-  --role-session-name viewer-session
-
-# Admin role
-aws sts assume-role \
-  --role-arn arn:aws:iam::<ACCOUNT_ID>:role/autonomous-pricing-admin \
-  --role-session-name admin-session
+  --region us-east-1
 ```
 
 ---
 
-## Step 2: Enable Bedrock Access
+## Step 2: Build and Deploy Application Stack (Manual)
 
-**IMPORTANT:** You must enable Bedrock model access in the AWS Console before deploying.
-
-1. Go to AWS Console → Amazon Bedrock
-2. Navigate to "Model access" in left sidebar
-3. Click "Edit" and enable:
-   - Claude 3 Sonnet
-   - Claude 3 Haiku (optional, for cost optimization)
-4. Click "Save changes"
-
-**Region:** Make sure you enable models in the same region you deploy (ap-south-1 recommended)
-
----
-
-## Step 3: Build and Deploy Main Application
-
-From the project root:
+From `lambdas`:
 
 ```bash
 cd D:\Projects\AI for Bharath\AlgoNauts-Autonomous-Pricing-Engine\lambdas
 
-# Build the SAM application
 sam build
-
-# Deploy with guided setup (first time)
 sam deploy --guided
-
-# Follow the prompts:
-# - Stack name: autonomous-pricing-engine
-# - Region: ap-south-1
-# - Confirm changes: Y
-# - Allow SAM CLI IAM role creation: Y
-# - Save arguments to configuration: Y
 ```
 
-### For Subsequent Deployments
+Use these values during first guided deploy:
+- Stack name: `autonomous-pricing-engine`
+- AWS Region: `us-east-1`
+- Confirm changeset before deploy: `Y`
+- Allow SAM IAM role creation: `Y`
+- Save configuration: `Y`
+
+For later updates (still manual):
 
 ```bash
-sam build && sam deploy
-```
-
----
-
-## Step 4: Verify Deployment
-
-```bash
-# List deployed resources
-aws cloudformation describe-stacks \
-  --stack-name autonomous-pricing-engine \
-  --region ap-south-1
-
-# Get API Gateway endpoint
-aws cloudformation describe-stacks \
-  --stack-name autonomous-pricing-engine \
-  --query 'Stacks[0].Outputs[?contains(OutputKey, `API`)].OutputValue' \
-  --output text \
-  --region ap-south-1
-
-# Expected output:
-# https://<api-id>.execute-api.ap-south-1.amazonaws.com
+sam build
+sam deploy
 ```
 
 ---
 
-## Step 5: Test Bedrock Integration
-
-Test that Bedrock is accessible from Lambda:
+## Step 3: Verify Deployment (Manual)
 
 ```bash
-# Invoke correction agent with test event
+aws cloudformation describe-stacks \
+  --stack-name autonomous-pricing-engine \
+  --region us-east-1
+
+aws cloudformation describe-stacks \
+  --stack-name autonomous-pricing-engine \
+  --query "Stacks[0].Outputs" \
+  --output table \
+  --region us-east-1
+```
+
+Capture and store:
+- API endpoint
+- State machine ARN
+- DynamoDB table names
+
+---
+
+## Step 4: Smoke Tests (Manual)
+
+From `lambdas`:
+
+```bash
+# Seed data
+sam local invoke DataSimulatorFunction -e events/market_processor_event.json
+
+# Pricing engine test
+sam local invoke PricingEngineFunction -e events/pricing_engine_event.json
+
+# Guardrail test
+sam local invoke GuardrailExecutorFunction -e events/guardrail_executor_event.json
+
+# Monitoring test
+sam local invoke MonitoringAgentFunction -e events/monitoring_agent_event.json
+
+# Correction (Bedrock path)
+sam local invoke CorrectionAgentFunction -e events/correction_agent_event.json
+
+# AI interface test
+sam local invoke AIInterfaceFunction -e events/ai_interface_query_event.json
+```
+
+If invoking deployed lambdas directly:
+
+```bash
 aws lambda invoke \
   --function-name autonomous-pricing-correction-agent \
-  --region ap-south-1 \
-  --payload fileb://events/correction_event.json \
+  --region us-east-1 \
+  --payload fileb://events/correction_agent_event.json \
   response.json
-
-# Check response
-cat response.json
 ```
 
 ---
 
-## Step 6: Deploy Frontend (Streamlit)
+## Step 5: Frontend Run (Manual)
 
-### Option A: AWS Amplify (Recommended)
+From `dashboard`:
 
 ```bash
-# Install Amplify CLI
-npm install -g @aws-amplify/cli
-
-# Initialize Amplify in frontend directory
-cd frontend
-amplify init
-
-# Add hosting
-amplify add hosting
-# Choose: Amplify Console
-# Choose: Manual deployment
-
-# Deploy
-amplify publish
+cd D:\Projects\AI for Bharath\AlgoNauts-Autonomous-Pricing-Engine\dashboard
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
-### Option B: EC2 (Alternative)
+Set `API_BASE` in your `.env` to the deployed API URL before running.
+
+---
+
+## Change Management (Operator-Only)
+
+Before any deploy:
 
 ```bash
-# Launch t3.micro instance
-# Install Python and dependencies
-# Run Streamlit on port 8501
-
-# Use security group allowing inbound 8501
+git status
+git diff
+sam validate
 ```
+
+Deploy only after you review those outputs.
 
 ---
 
-## Architecture After Deployment
+## Rollback (Manual)
 
+If a deploy fails:
+
+```bash
+aws cloudformation describe-stack-events \
+  --stack-name autonomous-pricing-engine \
+  --region us-east-1 \
+  --max-items 30
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    AWS Cloud (ap-south-1)                       │
-│                                                                  │
-│  ┌─────────────────┐    ┌─────────────────┐                    │
-│  │  API Gateway    │───▶│  AI Interface   │                    │
-│  │  (HTTP API)     │    │  Lambda         │                    │
-│  └─────────────────┘    └────────┬────────┘                    │
-│                                  │                              │
-│                                  ▼                              │
-│                    ┌──────────────────────────┐                 │
-│                    │   Amazon Bedrock         │                 │
-│                    │   (Claude 3 Sonnet)      │                 │
-│                    └──────────────────────────┘                 │
-│                                  │                              │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Lambda Functions (6 total)                 │   │
-│  │                                                          │   │
-│  │  Market Processor ──▶ Pricing Engine ──▶ Guardrail     │   │
-│  │         │                  │                 │          │   │
-│  │         ▼                  ▼                 ▼          │   │
-│  │  ┌──────────────────────────────────────────────────┐   │   │
-│  │  │           DynamoDB Tables                        │   │   │
-│  │  │  Products │ Decisions │ Corrections             │   │   │
-│  │  └──────────────────────────────────────────────────┘   │   │
-│  │                                                          │   │
-│  │  Monitoring Agent ──▶ Correction Agent (Bedrock)       │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  ┌─────────────────┐    ┌─────────────────┐                    │
-│  │  EventBridge    │    │  SQS Queue      │                    │
-│  │  Event Bus      │    │  (Market Data)  │                    │
-│  └─────────────────┘    └─────────────────┘                    │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+
+Then fix and redeploy manually. Do not run delete commands unless you explicitly decide to.
 
 ---
 
-## Cost Estimates (5-Day Prototype)
+## Notes
 
-| Service | Estimated Cost |
-|---------|---------------|
-| Lambda | ~$1-2 |
-| DynamoDB | ~$3-5 |
-| API Gateway | ~$0.50 |
-| EventBridge | ~$0.10 |
-| **Bedrock** | **~$10-15** |
-| S3 (if used) | ~$0.50 |
-| CloudWatch | ~$2-3 |
-| **TOTAL** | **~$17-25** |
-
----
-
-## Troubleshooting
-
-### Bedrock Access Denied
-
-```
-Error: AccessDeniedException when calling bedrock:InvokeModel
-```
-
-**Solution:** Enable model access in Bedrock Console (see Step 2)
-
-### Lambda Timeout
-
-```
-Error: Task timed out after 30 seconds
-```
-
-**Solution:** Increase timeout for AI-heavy functions (already set to 60s for correction_agent)
-
-### DynamoDB Throttling
-
-```
-Error: ProvisionedThroughputExceededException
-```
-
-**Solution:** Already using PAY_PER_REQUEST billing mode (on-demand)
-
----
-
-## Next Steps After Deployment
-
-1. ✅ Deploy backend (this guide)
-2. ⬜ Build Streamlit frontend
-3. ⬜ Test complete flow
-4. ⬜ Create demo video
-5. ⬜ Prepare PPT
-6. ⬜ Submit before March 4
+- This guide replaces any prior assumption of auto-managed deployment.
+- Operating model is now: **you approve, you execute, you verify**.

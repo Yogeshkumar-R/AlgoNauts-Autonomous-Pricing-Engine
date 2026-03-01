@@ -18,7 +18,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from shared import setup_logger, generate_timestamp, STATUS_SUCCESS
 
@@ -147,6 +147,12 @@ def generate_market_trend() -> str:
     return random.choice(trends)
 
 
+import json
+from decimal import Decimal
+
+def _to_decimal(obj):
+    return json.loads(json.dumps(obj), parse_float=Decimal)
+
 def initialize_sample_products() -> List[Dict]:
     """
     Initialize sample products in DynamoDB if they don't exist.
@@ -161,7 +167,7 @@ def initialize_sample_products() -> List[Dict]:
 
             if 'Item' not in existing:
                 # Create new product
-                item = {
+                item = _to_decimal({
                     'product_id': product['product_id'],
                     'name': product['name'],
                     'category': product['category'],
@@ -177,7 +183,7 @@ def initialize_sample_products() -> List[Dict]:
                     ),
                     'created_at': generate_timestamp(),
                     'updated_at': generate_timestamp()
-                }
+                })
                 table.put_item(Item=item)
                 initialized.append(product['product_id'])
                 logger.info(f"Initialized product: {product['product_id']}")

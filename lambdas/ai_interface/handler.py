@@ -17,9 +17,10 @@ from collections import defaultdict
 
 import boto3
 from botocore.exceptions import ClientError
+from langsmith import traceable
 
 # Add shared module to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from shared import (
     DynamoDBClient,
@@ -274,8 +275,13 @@ def format_pricing_patterns(decisions: List[Dict]) -> str:
 """
 
 
+@traceable(
+    name="bedrock-claude-ai-interface",
+    tags=["bedrock", "ai-interface", "seller-query"],
+    metadata={"model": "claude-haiku-4-5"}
+)
 def call_bedrock(prompt: str, max_tokens: int = 1000) -> str:
-    """Call Bedrock Claude model."""
+    """Call Bedrock Claude model with LangSmith tracing."""
     try:
         client = get_bedrock_client()
 
@@ -648,7 +654,26 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     logger.info(f"AI Interface invoked with event: {json.dumps(event, default=str)}")
 
     try:
-        query_type = event.get('query_type', 'query')
+        payload = event
+
+        # Handle API Gateway HTTP API events where request data is in body.
+        if isinstance(event, dict) and 'body' in event:
+            body = event.get('body')
+            if isinstance(body, str) and body:
+                payload = json.loads(body)
+            elif isinstance(body, dict):
+                payload = body
+            elif body is None:
+                payload = {}
+            else:
+                raise ValueError("Invalid request body format")
+
+            # Fill query_type from path when body omits it.
+            path_qt = (event.get('pathParameters') or {}).get('query_type')
+            if path_qt and isinstance(payload, dict):
+                payload.setdefault('query_type', path_qt)
+
+        query_type = payload.get('query_type', 'query')
 
         # Route to appropriate handler
         handlers = {
@@ -670,7 +695,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 })
             }
 
-        result = handler(event)
+        result = handler(payload)
 
         return {
             'statusCode': 200 if result['status'] == STATUS_SUCCESS else 400,

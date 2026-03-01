@@ -5,8 +5,11 @@
   "MIN_MARGIN_PERCENT": "5.0",
   "MAX_PRICE_DROP_PERCENT": "25.0",
   "DEVIATION_THRESHOLD_PERCENT": "20.0",
-  "BEDROCK_MODEL_ID": "anthropic.claude-4.5-haiku-20240229-v1:0",
+  "BEDROCK_MODEL_ID": "anthropic.claude-haiku-4-5-20251001-v1:0",
   "BEDROCK_REGION": "us-east-1",
   "AWS_REGION": "us-east-1",
-  "LOG_LEVEL": "INFO"
+  "LOG_LEVEL": "INFO",
+  "LANGSMITH_TRACING_V2": "true",
+  "LANGSMITH_PROJECT": "autonomous-pricing-engine",
+  "LANGSMITH_API_KEY": ""
 }

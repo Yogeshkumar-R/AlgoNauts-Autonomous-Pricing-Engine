@@ -6,6 +6,7 @@ Triggers correction events when deviation exceeds threshold.
 """
 
 import json
+import boto3
 from typing import Any, Dict, Optional
 import sys
 import os
@@ -13,7 +14,7 @@ import random
 from datetime import datetime, timedelta
 
 # Add shared module to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from shared import (
     DynamoDBClient,
@@ -31,6 +32,15 @@ from shared import (
 
 logger = setup_logger(__name__)
 db_client = DynamoDBClient()
+
+# EventBridge client (lazy init)
+_eventbridge = None
+
+def get_eventbridge():
+    global _eventbridge
+    if _eventbridge is None:
+        _eventbridge = boto3.client('events', region_name=os.environ.get('BEDROCK_REGION', 'us-east-1'))
+    return _eventbridge
 
 
 def simulate_actual_sales(
@@ -94,28 +104,22 @@ def calculate_deviation(
 
 def get_recent_decision(product_id: str) -> Optional[Dict[str, Any]]:
     """
-    Get the most recent pricing decision for a product.
-
-    Args:
-        product_id: Product identifier
-
-    Returns:
-        Most recent decision record or None
+    Get the most recent pricing decision for a product using GSI.
     """
     try:
-        # Query decisions by product_id (requires GSI on product_id)
-        # For now, scan with filter
-        decisions = db_client.scan(
+        # Use the ProductTimestampIndex GSI for efficient query
+        decisions = db_client.query(
             DECISIONS_TABLE,
-            filter_expression='product_id = :pid',
+            key_condition='product_id = :pid',
             expression_values={':pid': product_id},
-            limit=10
+            index_name='ProductTimestampIndex',
+            limit=1
         )
 
         if not decisions:
             return None
 
-        # Sort by timestamp descending
+        # GSI with RANGE key on timestamp — returns sorted ascending; take last item
         decisions.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
         return decisions[0]
 
@@ -128,7 +132,8 @@ def trigger_correction(
     product_id: str,
     decision_id: str,
     deviation_data: Dict[str, Any],
-    performance_data: Dict[str, Any]
+    performance_data: Dict[str, Any],
+    publish_event: bool = True
 ) -> Dict[str, Any]:
     """
     Create correction event for AI analysis.
@@ -162,10 +167,24 @@ def trigger_correction(
 
     logger.info(f"Created correction event {correction_id} for product {product_id}")
 
+    # In Step Functions mode, orchestration already calls correction agent.
+    if publish_event:
+        try:
+            event_bus = os.environ.get('EVENT_BUS_NAME', 'autonomous-pricing-event-bus')
+            get_eventbridge().put_events(Entries=[{
+                'Source': 'autonomous-pricing.correction',
+                'DetailType': 'correction_triggered',
+                'Detail': json.dumps(correction_event),
+                'EventBusName': event_bus
+            }])
+            logger.info(f"Fired correction event {correction_id} to EventBridge")
+        except Exception as eb_err:
+            logger.warning(f"EventBridge publish failed (non-fatal): {eb_err}")
+
     return correction_event
 
 
-def run_monitoring(event: Dict[str, Any]) -> Dict[str, Any]:
+def run_monitoring(event: Dict[str, Any], trigger_next: bool = True) -> Dict[str, Any]:
     """
     Execute monitoring logic for a product.
 
@@ -252,7 +271,8 @@ def run_monitoring(event: Dict[str, Any]) -> Dict[str, Any]:
                 product_id=product_id,
                 decision_id=decision_id,
                 deviation_data=sales_deviation,
-                performance_data=performance_data
+                performance_data=performance_data,
+                publish_event=trigger_next
             )
             correction_triggered = True
 
@@ -312,45 +332,42 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     AWS Lambda entry point for monitoring agent.
 
-    Args:
-        event: Lambda event payload
-        context: Lambda context
-
-    Returns:
-        JSON response with monitoring result
+    Accepts:
+    - Step Functions (_sf_mode: true) — returns clean dict with threshold_exceeded bool
+    - EventBridge / Schedule / Direct — returns HTTP response
     """
-    logger.info(f"Monitoring agent invoked with event: {json.dumps(event, default=str)}")
+    logger.info(f"Monitoring agent invoked: {json.dumps(event, default=str)[:300]}")
+
+    sf_mode = bool(event.get('_sf_mode', False))
+
+    # Scheduled trigger — scan products and monitor each
+    if event.get('trigger_type') == 'scheduled':
+        products = db_client.scan(PRODUCTS_TABLE, limit=50)
+        results = []
+        for p in (products or []):
+            try:
+                results.append(run_monitoring({'product_id': p['product_id']}, trigger_next=True))
+            except Exception as ex:
+                logger.warning(f"Monitoring failed for {p.get('product_id')}: {ex}")
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'monitored': len(results), 'results': results}, default=str)
+        }
 
     try:
-        # Handle different event sources
-        if 'Records' in event:
-            # Batch processing
-            results = []
-            for record in event['Records']:
-                if 'body' in record:
-                    body = json.loads(record['body'])
-                elif 'kinesis' in record:
-                    body = json.loads(record['kinesis']['data'])
-                else:
-                    body = record
-
-                result = run_monitoring(body)
-                results.append(result)
-
-            return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'processed': len(results),
-                    'results': results
-                }, default=str)
-            }
-
-        elif 'detail' in event:
-            # EventBridge event
-            result = run_monitoring(event['detail'])
+        if 'detail' in event:
+            detail = event['detail']
+            sf_mode = bool(sf_mode or detail.get('_sf_mode', False))
+            result = run_monitoring(detail, trigger_next=not sf_mode)
         else:
-            # Direct invocation
-            result = run_monitoring(event)
+            result = run_monitoring(event, trigger_next=not sf_mode)
+
+        if sf_mode:
+            if result.get('status') == STATUS_FAILED:
+                raise Exception(result.get('error', 'monitoring_agent failed'))
+            # Ensure threshold_exceeded is a proper bool for Choice state
+            result['threshold_exceeded'] = bool(result.get('threshold_exceeded', False))
+            return result
 
         return {
             'statusCode': 200 if result['status'] == STATUS_SUCCESS else 400,
@@ -359,6 +376,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     except Exception as e:
         logger.exception(f"Lambda handler error: {e}")
+        if sf_mode:
+            raise
         return {
             'statusCode': 500,
             'body': json.dumps({

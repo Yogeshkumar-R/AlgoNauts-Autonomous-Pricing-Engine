@@ -11,7 +11,7 @@ import sys
 import os
 
 # Add shared module to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from shared import (
     DynamoDBClient,
@@ -276,7 +276,8 @@ def execute_guardrails(event: Dict[str, Any]) -> Dict[str, Any]:
                     ':status': decision_status,
                     ':timestamp': timestamp,
                     ':validations': validation_result['validations']
-                }
+                },
+                expression_attribute_names={'#status': 'status'}
             )
 
             # Apply price if auto_apply is enabled
@@ -329,7 +330,8 @@ def execute_guardrails(event: Dict[str, Any]) -> Dict[str, Any]:
                     ':timestamp': timestamp,
                     ':reason': str(e),
                     ':violation': e.violation_type
-                }
+                },
+                expression_attribute_names={'#status': 'status'}
             )
 
             logger.warning(f"Guardrail validation failed for decision {decision_id}: {e}")
@@ -365,45 +367,24 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     AWS Lambda entry point for guardrail executor.
 
-    Args:
-        event: Lambda event payload
-        context: Lambda context
-
-    Returns:
-        JSON response with validation result
+    Accepts:
+    - Step Functions (_sf_mode: true) — returns clean dict
+    - EventBridge / Direct invocation — returns HTTP response
     """
-    logger.info(f"Guardrail executor invoked with event: {json.dumps(event, default=str)}")
+    logger.info(f"Guardrail executor invoked: {json.dumps(event, default=str)[:300]}")
+
+    sf_mode = event.get('_sf_mode', False)
 
     try:
-        # Handle different event sources
-        if 'Records' in event:
-            # Batch processing
-            results = []
-            for record in event['Records']:
-                if 'body' in record:
-                    body = json.loads(record['body'])
-                elif 'kinesis' in record:
-                    body = json.loads(record['kinesis']['data'])
-                else:
-                    body = record
-
-                result = execute_guardrails(body)
-                results.append(result)
-
-            return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'processed': len(results),
-                    'results': results
-                }, default=str)
-            }
-
-        elif 'detail' in event:
-            # EventBridge event
+        if 'detail' in event:
             result = execute_guardrails(event['detail'])
         else:
-            # Direct invocation
             result = execute_guardrails(event)
+
+        if sf_mode:
+            if result.get('status') == STATUS_FAILED:
+                raise Exception(result.get('error', 'guardrail_executor failed'))
+            return result
 
         status_code = 200 if result['status'] == STATUS_SUCCESS else 400
         return {
@@ -413,6 +394,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     except Exception as e:
         logger.exception(f"Lambda handler error: {e}")
+        if sf_mode:
+            raise
         return {
             'statusCode': 500,
             'body': json.dumps({

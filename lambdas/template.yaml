@@ -1,10 +1,17 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Autonomous Pricing Engine - Serverless Event-Driven Pricing System
+Description: Autonomous Pricing Engine - Serverless Event-Driven Pricing System (Step Functions Orchestration)
+
+Parameters:
+  LangsmithApiKey:
+    Type: String
+    NoEcho: true
+    Description: LangSmith API key for AI traceability
+    Default: ''
 
 Globals:
   Function:
-    Runtime: python3.11
+    Runtime: python3.12
     Architectures:
       - x86_64
     Timeout: 30
@@ -17,15 +24,20 @@ Globals:
         MIN_MARGIN_PERCENT: '5.0'
         MAX_PRICE_DROP_PERCENT: '25.0'
         DEVIATION_THRESHOLD_PERCENT: '20.0'
-        BEDROCK_MODEL_ID: 'anthropic.claude-3-sonnet-20240229-v1:0'
+        BEDROCK_MODEL_ID: 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
         BEDROCK_REGION: !Ref AWS::Region
         EVENT_BUS_NAME: !Ref PricingEventBus
-        SQS_QUEUE_URL: !Ref MarketDataQueue
+        LANGSMITH_TRACING_V2: 'true'
+        LANGSMITH_PROJECT: 'autonomous-pricing-engine'
+        LANGSMITH_API_KEY: !Ref LangsmithApiKey
     LoggingConfig:
       LogFormat: JSON
 
 Resources:
-  # DynamoDB Tables
+
+  # ============================================================
+  # DYNAMODB TABLES
+  # ============================================================
   ProductsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -86,7 +98,129 @@ Resources:
           Projection:
             ProjectionType: ALL
 
-  # Lambda Functions
+  # ============================================================
+  # STEP FUNCTIONS — Pipeline Orchestration
+  # ============================================================
+  StateMachineExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: autonomous-pricing-sf-execution-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokePipelineLambdas
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !GetAtt MarketProcessorFunction.Arn
+                  - !GetAtt PricingEngineFunction.Arn
+                  - !GetAtt GuardrailExecutorFunction.Arn
+                  - !GetAtt MonitoringAgentFunction.Arn
+                  - !GetAtt CorrectionAgentFunction.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogDelivery
+                  - logs:GetLogDelivery
+                  - logs:UpdateLogDelivery
+                  - logs:DeleteLogDelivery
+                  - logs:ListLogDeliveries
+                  - logs:PutResourcePolicy
+                  - logs:DescribeResourcePolicies
+                  - logs:DescribeLogGroups
+                Resource: '*'
+
+  PricingStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: autonomous-pricing-pipeline
+      DefinitionUri: statemachine/pricing_pipeline.asl.json
+      DefinitionSubstitutions:
+        MarketProcessorFunctionArn: !GetAtt MarketProcessorFunction.Arn
+        PricingEngineFunctionArn: !GetAtt PricingEngineFunction.Arn
+        GuardrailExecutorFunctionArn: !GetAtt GuardrailExecutorFunction.Arn
+        MonitoringAgentFunctionArn: !GetAtt MonitoringAgentFunction.Arn
+        CorrectionAgentFunctionArn: !GetAtt CorrectionAgentFunction.Arn
+      Role: !GetAtt StateMachineExecutionRole.Arn
+      Logging:
+        Level: ALL
+        IncludeExecutionData: true
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt StateMachineLogGroup.Arn
+
+  StateMachineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/states/autonomous-pricing-pipeline
+      RetentionInDays: 7
+
+  # ============================================================
+  # EVENTBRIDGE
+  # ============================================================
+  PricingEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: autonomous-pricing-event-bus
+
+  # ============================================================
+  # API GATEWAY
+  # ============================================================
+  PricingAPI:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: Autonomous-Pricing-API
+      CorsConfiguration:
+        AllowMethods:
+          - POST
+          - GET
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+        AllowOrigins:
+          - "*"
+
+  # ============================================================
+  # LAMBDA FUNCTIONS
+  # ============================================================
+
+  # 1. SIMULATE EVENT — Hackathon demo entry point
+  SimulateEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: autonomous-pricing-simulate-event
+      CodeUri: simulate_event/
+      Handler: handler.lambda_handler
+      Description: Generates synthetic market events and starts the pricing pipeline
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: !Ref PricingStateMachine
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ProductsTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - states:StartExecution
+              - states:DescribeExecution
+            Resource: !Ref PricingStateMachine
+      Events:
+        SimulateAPI:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PricingAPI
+            Path: /simulate
+            Method: POST
+
+  # 2. MARKET PROCESSOR — Updates product market data
   MarketProcessorFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -96,20 +230,24 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ProductsTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - events:PutEvents
+            Resource: !GetAtt PricingEventBus.Arn
       Events:
         MarketDataEvent:
           Type: EventBridgeRule
           Properties:
+            EventBusName: !Ref PricingEventBus
             Pattern:
               source:
                 - autonomous-pricing.market
+                - autonomous-pricing.ingestion
+                - autonomous-pricing.simulator
             RuleName: market-processor-rule
-        SQSEvent:
-          Type: SQS
-          Properties:
-            Queue: !GetAtt MarketDataQueue.Arn
-            BatchSize: 10
 
+  # 3. PRICING ENGINE — Deterministic price calculation
   PricingEngineFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -121,15 +259,22 @@ Resources:
             TableName: !Ref ProductsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref DecisionsTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - events:PutEvents
+            Resource: !GetAtt PricingEventBus.Arn
       Events:
         PricingRequest:
           Type: EventBridgeRule
           Properties:
+            EventBusName: !Ref PricingEventBus
             Pattern:
               source:
                 - autonomous-pricing.engine
             RuleName: pricing-engine-rule
 
+  # 4. GUARDRAIL EXECUTOR — Business rule validation
   GuardrailExecutorFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -141,17 +286,19 @@ Resources:
             TableName: !Ref DecisionsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ProductsTable
-        - DynamoDBUpdatePolicy:
+        - DynamoDBCrudPolicy:
             TableName: !Ref DecisionsTable
       Events:
         GuardrailValidation:
           Type: EventBridgeRule
           Properties:
+            EventBusName: !Ref PricingEventBus
             Pattern:
               source:
                 - autonomous-pricing.guardrail
             RuleName: guardrail-executor-rule
 
+  # 5. MONITORING AGENT — Deviation detection
   MonitoringAgentFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -165,8 +312,13 @@ Resources:
             TableName: !Ref DecisionsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref CorrectionsTable
-        - DynamoDBUpdatePolicy:
+        - DynamoDBCrudPolicy:
             TableName: !Ref DecisionsTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - events:PutEvents
+            Resource: !GetAtt PricingEventBus.Arn
       Events:
         ScheduledMonitoring:
           Type: Schedule
@@ -174,10 +326,10 @@ Resources:
             Schedule: rate(1 hour)
             Input: |
               {
-                "trigger_type": "scheduled",
-                "batch_size": 100
+                "trigger_type": "scheduled"
               }
 
+  # 6. CORRECTION AGENT — AI-powered price correction (Bedrock)
   CorrectionAgentFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -199,17 +351,18 @@ Resources:
             Effect: Allow
             Action:
               - bedrock:InvokeModel
-            Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
+            Resource: "*"
       Events:
         CorrectionEvent:
           Type: EventBridgeRule
           Properties:
+            EventBusName: !Ref PricingEventBus
             Pattern:
               source:
                 - autonomous-pricing.correction
             RuleName: correction-agent-rule
 
-  # AI Interface - The "face" of the AI Pricing Manager
+  # 7. AI INTERFACE — Natural language pricing queries (Bedrock)
   AIInterfaceFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -229,26 +382,25 @@ Resources:
             Effect: Allow
             Action:
               - bedrock:InvokeModel
-            Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
+            Resource: "*"
       Events:
         APIEvent:
           Type: HttpApi
           Properties:
+            ApiId: !Ref PricingAPI
             Path: /ai/{query_type}
             Method: POST
         DailySummarySchedule:
           Type: Schedule
           Properties:
-            Schedule: cron(0 8 * * ? *)  # Daily at 8 AM
+            Schedule: cron(0 8 * * ? *)
             Input: |
               {
                 "query_type": "daily_summary",
                 "seller_id": "ALL"
               }
 
-  # ========================================
-  # DATA INGESTION API - Entry point for external data
-  # ========================================
+  # 8. INGESTION API — Market data entry point (EventBridge only, no SQS)
   IngestionAPIFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -258,8 +410,6 @@ Resources:
       MemorySize: 256
       Timeout: 30
       Policies:
-        - SQSSendMessagePolicy:
-            QueueName: !GetAtt MarketDataQueue.QueueName
         - Statement:
             Effect: Allow
             Action:
@@ -269,17 +419,17 @@ Resources:
         IngestMarketData:
           Type: HttpApi
           Properties:
+            ApiId: !Ref PricingAPI
             Path: /ingest/market-data
             Method: POST
         IngestBatch:
           Type: HttpApi
           Properties:
+            ApiId: !Ref PricingAPI
             Path: /ingest/batch
             Method: POST
 
-  # ========================================
-  # DATA SIMULATOR - For demos and testing
-  # ========================================
+  # 9. DATA SIMULATOR — Seeds products and demo data
   DataSimulatorFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -297,147 +447,57 @@ Resources:
               - events:PutEvents
             Resource: !GetAtt PricingEventBus.Arn
       Events:
-        # Run simulation every 15 minutes for demo
-        ScheduledSimulation:
-          Type: Schedule
-          Properties:
-            Schedule: rate(15 minutes)
-            Input: |
-              {
-                "mode": "batch",
-                "event_type": "normal"
-              }
-        # API trigger for on-demand simulation (for demos)
-        SimulateAPI:
+        SeedAPI:
           Type: HttpApi
           Properties:
-            Path: /simulate/{mode}
+            ApiId: !Ref PricingAPI
+            Path: /seed
             Method: POST
 
-  # API Gateway for AI Interface
-  PricingAPI:
-    Type: AWS::Serverless::HttpApi
-    Properties:
-      Name: Autonomous-Pricing-API
-      CorsConfiguration:
-        AllowMethods:
-          - POST
-          - GET
-        AllowHeaders:
-          - Content-Type
-          - Authorization
-        AllowOrigins:
-          - "*"
-
-  # SQS Queues
-  MarketDataQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: autonomous-pricing-market-data-queue
-      VisibilityTimeout: 60
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt MarketDataDeadLetterQueue.Arn
-        maxReceiveCount: 3
-
-  MarketDataDeadLetterQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: autonomous-pricing-market-data-dlq
-
-  # EventBridge Event Bus
-  PricingEventBus:
-    Type: AWS::Events::EventBus
-    Properties:
-      Name: autonomous-pricing-event-bus
-
-  # IAM Role for Bedrock access (for correction agent)
-  BedrockAccessRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: autonomous-pricing-bedrock-access
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: BedrockInvokePolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - bedrock:InvokeModel
-                Resource: '*'
-
+# ============================================================
+# OUTPUTS
+# ============================================================
 Outputs:
+  PricingAPIEndpoint:
+    Description: Base API Gateway URL
+    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
+
+  SimulateEndpoint:
+    Description: POST to trigger a demo pricing pipeline run
+    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/simulate'
+
+  AIQueryEndpoint:
+    Description: POST to ask the AI pricing manager a question
+    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/ai/query'
+
+  IngestMarketDataEndpoint:
+    Description: POST to ingest real market data
+    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/ingest/market-data'
+
+  SeedEndpoint:
+    Description: POST to seed demo products into DynamoDB
+    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/seed'
+
+  StateMachineArn:
+    Description: Step Functions State Machine ARN
+    Value: !Ref PricingStateMachine
+
+  StateMachineUrl:
+    Description: AWS Console link to view pipeline executions
+    Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/states/home?region=${AWS::Region}#/statemachines/view/${PricingStateMachine}'
+
   ProductsTableName:
-    Description: Products DynamoDB Table Name
+    Description: Products DynamoDB Table
     Value: !Ref ProductsTable
 
   DecisionsTableName:
-    Description: Decisions DynamoDB Table Name
+    Description: Decisions DynamoDB Table
     Value: !Ref DecisionsTable
 
   CorrectionsTableName:
-    Description: Corrections DynamoDB Table Name
+    Description: Corrections DynamoDB Table
     Value: !Ref CorrectionsTable
 
-  MarketProcessorFunctionArn:
-    Description: Market Processor Lambda Function ARN
-    Value: !GetAtt MarketProcessorFunction.Arn
-
-  PricingEngineFunctionArn:
-    Description: Pricing Engine Lambda Function ARN
-    Value: !GetAtt PricingEngineFunction.Arn
-
-  GuardrailExecutorFunctionArn:
-    Description: Guardrail Executor Lambda Function ARN
-    Value: !GetAtt GuardrailExecutorFunction.Arn
-
-  MonitoringAgentFunctionArn:
-    Description: Monitoring Agent Lambda Function ARN
-    Value: !GetAtt MonitoringAgentFunction.Arn
-
-  CorrectionAgentFunctionArn:
-    Description: Correction Agent Lambda Function ARN
-    Value: !GetAtt CorrectionAgentFunction.Arn
-
-  AIInterfaceFunctionArn:
-    Description: AI Interface Lambda Function ARN
-    Value: !GetAtt AIInterfaceFunction.Arn
-
-  IngestionAPIFunctionArn:
-    Description: Data Ingestion API Lambda Function ARN
-    Value: !GetAtt IngestionAPIFunction.Arn
-
-  DataSimulatorFunctionArn:
-    Description: Data Simulator Lambda Function ARN
-    Value: !GetAtt DataSimulatorFunction.Arn
-
-  PricingAPIEndpoint:
-    Description: API Gateway Endpoint URL
-    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
-
   PricingEventBusName:
-    Description: Pricing Event Bus Name
+    Description: Custom EventBridge Bus
     Value: !Ref PricingEventBus
-
-  MarketDataQueueUrl:
-    Description: SQS Queue URL for Market Data
-    Value: !Ref MarketDataQueue
-
-  # API Endpoints for easy reference
-  IngestMarketDataEndpoint:
-    Description: Endpoint to ingest market data
-    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/ingest/market-data'
-
-  SimulateEndpoint:
-    Description: Endpoint to trigger data simulation
-    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/simulate/single'
-
-  AIQueryEndpoint:
-    Description: Endpoint for AI queries
-    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/ai/query'

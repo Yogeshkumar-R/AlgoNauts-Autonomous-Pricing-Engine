@@ -15,7 +15,7 @@ MAX_PRICE_DROP_PERCENT = float(os.environ.get('MAX_PRICE_DROP_PERCENT', '25.0'))
 DEVIATION_THRESHOLD_PERCENT = float(os.environ.get('DEVIATION_THRESHOLD_PERCENT', '20.0'))  # 20% deviation
 
 # Bedrock Configuration
-BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-sonnet-20240229-v1:0')
+BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', '')
 BEDROCK_REGION = os.environ.get('BEDROCK_REGION', 'us-east-1')
 
 # Response Status Codes

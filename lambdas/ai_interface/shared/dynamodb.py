@@ -10,6 +10,30 @@ from .utils import setup_logger
 logger = setup_logger(__name__)
 
 
+import json
+from decimal import Decimal
+
+def _from_decimal(obj):
+    if isinstance(obj, Decimal):
+        # Convert Decimal to int if it's a whole number, else float
+        if obj % 1 == 0:
+            return int(obj)
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {k: _from_decimal(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_from_decimal(v) for v in obj]
+    return obj
+
+def _to_decimal(obj):
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif isinstance(obj, dict):
+        return {k: _to_decimal(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_to_decimal(v) for v in obj]
+    return obj
+
 class DynamoDBClient:
     """
     Wrapper class for DynamoDB operations.
@@ -78,7 +102,7 @@ class DynamoDBClient:
             )
             item = response.get('Item')
             logger.info(f"Retrieved item from {table_name}: {key}")
-            return item
+            return _from_decimal(item) if item is not None else None
         except ClientError as e:
             logger.error(f"Error getting item from {table_name}: {e}")
             raise
@@ -102,7 +126,7 @@ class DynamoDBClient:
         """
         try:
             table = self.get_table(table_name)
-            kwargs = {'Item': item}
+            kwargs = {'Item': _to_decimal(item)}
             if condition_expression:
                 kwargs['ConditionExpression'] = condition_expression
 
@@ -122,7 +146,8 @@ class DynamoDBClient:
         key: Dict[str, Any],
         update_expression: str,
         expression_values: Dict[str, Any],
-        return_values: str = 'UPDATED_NEW'
+        return_values: str = 'UPDATED_NEW',
+        expression_attribute_names: Optional[Dict[str, str]] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Update item in DynamoDB table.
@@ -130,26 +155,34 @@ class DynamoDBClient:
         Args:
             table_name: Name of the table
             key: Primary key dict
-            update_expression: Update expression (e.g., 'SET #p = :price')
+            update_expression: Update expression (e.g., 'SET #status = :status')
             expression_values: Expression attribute values
             return_values: What to return ('UPDATED_NEW', 'ALL_NEW', etc.)
+            expression_attribute_names: Optional dict mapping placeholders to reserved words
+                e.g. {'#status': 'status'} when 'status' is a reserved word
 
         Returns:
             Updated attributes or None
         """
         try:
             table = self.get_table(table_name)
-            response = table.update_item(
-                Key=key,
-                UpdateExpression=update_expression,
-                ExpressionAttributeValues=expression_values,
-                ReturnValues=return_values
-            )
+            kwargs = {
+                'Key': key,
+                'UpdateExpression': update_expression,
+                'ExpressionAttributeValues': _to_decimal(expression_values),
+                'ReturnValues': return_values
+            }
+            if expression_attribute_names:
+                kwargs['ExpressionAttributeNames'] = expression_attribute_names
+
+            response = table.update_item(**kwargs)
             logger.info(f"Updated item in {table_name}: {key}")
-            return response.get('Attributes')
+            attributes = response.get('Attributes')
+            return _from_decimal(attributes) if attributes else None
         except ClientError as e:
             logger.error(f"Error updating item in {table_name}: {e}")
             raise
+
 
     def query(
         self,
@@ -176,7 +209,7 @@ class DynamoDBClient:
             table = self.get_table(table_name)
             kwargs = {
                 'KeyConditionExpression': key_condition,
-                'ExpressionAttributeValues': expression_values
+                'ExpressionAttributeValues': _to_decimal(expression_values)
             }
             if index_name:
                 kwargs['IndexName'] = index_name
@@ -186,7 +219,7 @@ class DynamoDBClient:
             response = table.query(**kwargs)
             items = response.get('Items', [])
             logger.info(f"Query returned {len(items)} items from {table_name}")
-            return items
+            return _from_decimal(items)
         except ClientError as e:
             logger.error(f"Error querying {table_name}: {e}")
             raise
@@ -223,7 +256,7 @@ class DynamoDBClient:
             response = table.scan(**kwargs)
             items = response.get('Items', [])
             logger.info(f"Scan returned {len(items)} items from {table_name}")
-            return items
+            return _from_decimal(items)
         except ClientError as e:
             logger.error(f"Error scanning {table_name}: {e}")
             raise
@@ -247,7 +280,7 @@ class DynamoDBClient:
             table = self.get_table(table_name)
             with table.batch_writer() as batch:
                 for item in items:
-                    batch.put_item(Item=item)
+                    batch.put_item(Item=_to_decimal(item))
             logger.info(f"Batch wrote {len(items)} items to {table_name}")
             return True
         except ClientError as e:

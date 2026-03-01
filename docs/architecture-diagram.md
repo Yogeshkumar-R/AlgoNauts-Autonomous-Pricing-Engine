@@ -1,265 +1,104 @@
-# Autonomous Pricing Engine - AWS Architecture
+# Autonomous Pricing Engine - Updated Architecture
 
-## Architecture Overview Diagram
+## Current System Architecture (Implemented)
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                        AUTONOMOUS PRICING ENGINE - AWS ARCHITECTURE                  │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    %% Entry points
+    U[Streamlit Dashboard] --> API[API Gateway HTTP API]
+    EXT[External Market Feeds] --> ING[Ingestion API Lambda\nPOST /ingest/market-data\nPOST /ingest/batch]
+    API --> ING
+    API --> SIM[Simulate Event Lambda\nPOST /simulate]
+    API --> AISVC[AI Interface Lambda\nPOST /ai/query_type]
+    API --> SEED[Data Simulator Lambda\nPOST /seed]
 
-                                    ┌──────────────────┐
-                                    │   EXTERNAL       │
-                                    │   DATA SOURCES   │
-                                    │                  │
-                                    │ • Competitor    │
-                                    │   Prices        │
-                                    │ • Demand Signals │
-                                    │ • Market Trends  │
-                                    └────────┬─────────┘
-                                             │
-                                             ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              INGESTION LAYER                                        │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│    ┌──────────────────┐         ┌──────────────────┐                               │
-│    │   Amazon SQS     │         │  Amazon          │                               │
-│    │   Market Data    │────────▶│  EventBridge     │                               │
-│    │   Queue          │         │  Event Bus       │                               │
-│    └──────────────────┘         └────────┬─────────┘                               │
-│                                          │                                          │
-└──────────────────────────────────────────┼──────────────────────────────────────────┘
-                                           │
-                                           ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           PRICING DECISION ENGINE                                    │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│   ┌─────────────────────────────────────────────────────────────────────────────┐   │
-│   │                     AWS LAMBDA FUNCTIONS                                     │   │
-│   │                                                                              │   │
-│   │  ┌───────────────┐   ┌───────────────┐   ┌───────────────┐                 │   │
-│   │  │    MARKET     │   │   PRICING     │   │  GUARDRAIL    │                 │   │
-│   │  │   PROCESSOR   │──▶│    ENGINE     │──▶│   EXECUTOR    │                 │   │
-│   │  │               │   │               │   │               │                 │   │
-│   │  │ • Parse data  │   │ • Calculate   │   │ • Validate    │                 │   │
-│   │  │ • Update      │   │   optimal     │   │   margin      │                 │   │
-│   │  │   products    │   │   price       │   │ • Check       │                 │   │
-│   │  │               │   │ • Predict     │   │   safety      │                 │   │
-│   │  │               │   │   sales       │   │   rules       │                 │   │
-│   │  └───────────────┘   └───────────────┘   └───────┬───────┘                 │   │
-│   │                                                   │                          │   │
-│   │                                                   ▼                          │   │
-│   │                            ┌───────────────────────────────┐                │   │
-│   │                            │         APPROVED              │                │   │
-│   │                            │         DECISION              │                │   │
-│   │                            └───────────────────────────────┘                │   │
-│   │                                       │                                     │   │
-│   └───────────────────────────────────────┼─────────────────────────────────────┘   │
-│                                           │                                          │
-└───────────────────────────────────────────┼──────────────────────────────────────────┘
-                                            │
-                                            ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           MONITORING & CORRECTION                                    │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│   ┌───────────────────┐         ┌───────────────────────────────┐                  │
-│   │   MONITORING      │         │      CORRECTION               │                  │
-│   │   AGENT           │────────▶│      AGENT                    │                  │
-│   │   (Lambda)        │         │      (Lambda + Bedrock)       │                  │
-│   │                   │         │                               │                  │
-│   │ • Compare         │         │ • AI Root Cause Analysis      │                  │
-│   │   predicted vs    │         │ • Revised recommendations     │                  │
-│   │   actual sales    │         │ • Natural language            │                  │
-│   │ • Trigger         │         │   explanations                │                  │
-│   │   corrections     │         │ • Confidence scoring          │                  │
-│   │                   │         │                               │                  │
-│   │                   │         │  ┌─────────────────────────┐  │                  │
-│   │                   │         │  │   Amazon Bedrock        │  │                  │
-│   │                   │         │  │   Claude 3 Sonnet       │  │                  │
-│   │                   │         │  │                         │  │                  │
-│   │                   │         │  │   • Reasoning           │  │                  │
-│   │                   │         │  │   • Analysis            │  │                  │
-│   │                   │         │  │   • Explanation         │  │                  │
-│   │                   │         │  └─────────────────────────┘  │                  │
-│   └───────────────────┘         └───────────────────────────────┘                  │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-                                            │
-                                            ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           AI INTERFACE LAYER                                         │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│   ┌──────────────────┐         ┌───────────────────────────────┐                  │
-│   │   Amazon API     │────────▶│    AI INTERFACE               │                  │
-│   │   Gateway        │         │    (Lambda + Bedrock)        │                  │
-│   │                  │         │                               │                  │
-│   │  POST /ai/query  │         │  • Natural language queries   │                  │
-│   │  POST /ai/summary│         │  • Daily summaries            │                  │
-│   │  POST /ai/insight│         │  • Seller onboarding          │                  │
-│   │                  │         │  • Strategy recommendations   │                  │
-│   │                  │         │                               │                  │
-│   │                  │         │  ┌─────────────────────────┐  │                  │
-│   │                  │         │  │   Amazon Bedrock        │  │                  │
-│   │                  │         │  │   Claude 4.5 haiku      │  │                  │
-│   │                  │         │  └─────────────────────────┘  │                  │
-│   └──────────────────┘         └───────────────────────────────┘                  │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-                                            │
-                                            ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              DATA LAYER                                             │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│   ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐        │
-│   │    DynamoDB        │  │    DynamoDB        │  │    DynamoDB          │        │
-│   │    Products        │  │    Decisions       │  │    Corrections       │        │
-│   │    Table           │  │    Table            │  │    Table             │        │
-│   │                     │  │                     │  │                      │        │
-│   │  • product_id       │  │  • decision_id      │  │  • correction_id     │        │
-│   │  • name             │  │  • product_id       │  │  • product_id        │        │
-│   │  • cost_price       │  │  • recommended_     │  │  • root_cause        │        │
-│   │  • current_price    │  │    price            │  │  • ai_explanation    │        │
-│   │  • competitor_price │  │  • predicted_sales  │  │  • correction_time   │        │
-│   │  • demand_factor    │  │  • actual_sales     │  │  • confidence        │        │
-│   │  • margin           │  │  • strategy         │  │                      │        │
-│   │                     │  │  • timestamp        │  │                      │        │
-│   └─────────────────────┘  └─────────────────────┘  └─────────────────────┘        │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-                                            │
-                                            ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              USER INTERFACE                                         │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│   ┌──────────────────────────────────────────────────────────────────────────────┐  │
-│   │                        STREAMLIT DASHBOARD                                   │  │
-│   │                                                                              │  │
-│   │   ┌─────────────────────┐  ┌─────────────────────┐  ┌──────────────────┐   │  │
-│   │   │  Product Management │  │  Pricing Decisions  │  │  AI Insights     │   │  │
-│   │   │                     │  │                     │  │                  │   │  │
-│   │   │  • View products    │  │  • View decisions   │  │  • Ask questions │   │  │
-│   │   │  • Update prices    │  │  • Approve/Reject   │  │  • Get summaries  │   │  │
-│   │   │  • Track margin     │  │  • View reasoning   │  │  • Get strategy  │   │  │
-│   │   └─────────────────────┘  └─────────────────────┘  └──────────────────┘   │  │
-│   │                                                                              │  │
-│   │   ┌─────────────────────────────────────────────────────────────────────┐   │  │
-│   │   │                    BEDROCK REASONING DISPLAY                        │   │  │
-│   │   │                                                                      │   │  │
-│   │   │   "The price was adjusted from ₹299 to ₹259 because competitor      │   │  │
-│   │   │    dropped prices by 15%. Based on demand elasticity analysis,      │   │  │
-│   │   │    this 13% reduction should increase sales volume by 22% while     │   │  │
-│   │   │    maintaining 8% margin. Confidence: 87%"                          │   │  │
-│   │   │                                                                      │   │  │
-│   │   └─────────────────────────────────────────────────────────────────────┘   │  │
-│   │                                                                              │  │
-│   └──────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-│   ┌──────────────────────────────────────────────────────────────────────────────┐  │
-│   │                    HOSTING: AWS Amplify / EC2                               │  │
-│   └──────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+    %% Event bus path
+    ING --> EB[EventBridge\nautonomous-pricing-event-bus]
+    SEED --> EB
+    EB --> MP[Market Processor Lambda]
+
+    %% Step Functions primary orchestration path
+    SIM --> SFN[Step Functions\nautonomous-pricing-pipeline]
+    SFN --> MP
+    SFN --> PE[Pricing Engine Lambda]
+    SFN --> GE[Guardrail Executor Lambda]
+    SFN --> MON[Monitoring Agent Lambda]
+    MON --> CH{Deviation exceeds threshold}
+    CH -- Yes --> CA[Correction Agent Lambda\nBedrock]
+    CH -- No --> DONE[Pipeline Succeeded]
+    CA --> DONE
+
+    %% Data layer
+    MP --> PDB[(DynamoDB\nProducts)]
+    PE --> DDB[(DynamoDB\nDecisions)]
+    GE --> PDB
+    GE --> DDB
+    MON --> DDB
+    MON --> CDB[(DynamoDB\nCorrections)]
+    CA --> CDB
+    CA --> DDB
+
+    %% AI interface data + model
+    AISVC --> PDB
+    AISVC --> DDB
+    AISVC --> CDB
+    AISVC --> BR[Amazon Bedrock\nClaude Haiku 4.5]
+    CA --> BR
 ```
 
----
+## Pipeline Stages (Step Functions)
 
-## AI Integration Flow (Why AI is Required)
+1. `market_processor`: writes latest competitor price and demand to `Products`.
+2. `pricing_engine`: computes deterministic recommendation and stores a pending decision.
+3. `guardrail_executor`: validates margin/cost/drop constraints; auto-applies approved price.
+4. `monitoring_agent`: compares predicted vs actual (or simulated) outcomes.
+5. `correction_agent` (conditional): runs only when deviation threshold is exceeded.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                    WHY AI IS REQUIRED - AUTONOMY LOOP                               │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+## API Surface (Current)
 
-   ┌─────────────────┐                                                            │
-   │  COMPETITOR     │                                                            │
-   │  PRICE DROP     │                                                            │
-   │  (Event)        │                                                            │
-   └────────┬────────┘                                                            │
-            │                                                                     │
-            ▼                                                                     │
-   ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐            │
-   │  TRADITIONAL     │    │  RULE-BASED     │    │  ❌ PROBLEM     │            │
-   │  APPROACH        │───▶│  PRICING        │───▶│                 │            │
-   │                  │    │                 │    │  • No reasoning │            │
-   │                  │    │  • Fixed rules  │    │  • No adaptive │            │
-   │                  │    │  • No context   │    │    correction  │            │
-   │                  │    │                 │    │  • No trust    │            │
-   └─────────────────┘    └─────────────────┘    └─────────────────┘            │
-                                                                                 │
-   ┌─────────────────────────────────────────────────────────────────────────────┐ │
-   │                     AI-POWERED APPROACH (BEDROCK)                           │ │
-   │                                                                             │ │
-   │  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐              │ │
-   │  │  DETECT       │    │  ANALYZE      │    │  REASON       │              │ │
-   │  │  Event        │───▶│  Context       │───▶│  (Bedrock)    │              │ │
-   │  │               │    │               │    │               │              │ │
-   │  │  Price drop   │    │  Market cond. │    │  • Why?       │              │ │
-   │  │  detected     │    │  Demand       │    │  • Impact?    │              │ │
-   │  │               │    │  Competition  │    │  • Confidence?│              │ │
-   │  └───────────────┘    └───────────────┘    └───────┬───────┘              │ │
-   │                                                    │                       │ │
-   │                                                    ▼                       │ │
-   │  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐              │ │
-   │  │  EXPLAIN      │◀───│  CORRECT      │◀───│  DECIDE       │              │ │
-   │  │  (Natural     │    │  (If needed)  │    │  New price    │              │ │
-   │  │   Language)   │    │               │    │               │              │ │
-   │  │               │    │  AI notices   │    │               │              │ │
-   │  │  "Competitor  │    │  deviation,   │    │               │              │ │
-   │  │   dropped by  │    │  analyzes     │    │               │              │ │
-   │  │   15%, so we  │    │  root cause,  │    │               │              │ │
-   │  │   adjusted..." │    │  corrects"    │    │               │              │ │
-   │  └───────────────┘    └───────────────┘    └───────────────┘              │ │
-   │                                                                             │ │
-   └─────────────────────────────────────────────────────────────────────────────┘ │
+| Endpoint | Backing Lambda | Purpose |
+|---|---|---|
+| `POST /seed` | `data_simulator` | Seed demo products |
+| `POST /simulate` | `simulate_event` | Generate synthetic event + start state machine |
+| `POST /ingest/market-data` | `ingestion_api` | Ingest one market signal |
+| `POST /ingest/batch` | `ingestion_api` | Ingest multiple market signals |
+| `POST /ai/{query_type}` | `ai_interface` | Seller-facing AI manager (`query`, `daily_summary`, `onboarding`, `strategy`, `bulk_explanation`) |
 
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                      VALUE AI ADDS TO USER EXPERIENCE                               │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│   ┌─────────────────────────────────────────────────────────────────────────────┐   │
-│   │                     WITHOUT AI                        WITH AI              │   │
-│   ├─────────────────────────────────────────────────────────────────────────────┤   │
-│   │                                                                             │   │
-│   │   ❌ No explanation           ───────────────▶  ✅ Clear reasoning         │   │
-│   │                                                                             │   │
-│   │   ❌ No adaptive correction   ───────────────▶  ✅ Self-correcting loop     │   │
-│   │                                                                             │   │
-│   │   ❌ Manual monitoring        ───────────────▶  ✅ Autonomous monitoring    │   │
-│   │                                                                             │   │
-│   │   ❌ No trust (black box)     ───────────────▶  ✅ Transparent decisions    │   │
-│   │                                                                             │   │
-│   │   ❌ Calculator approach      ───────────────▶  ✅ Pricing Manager approach │   │
-│   │                                                                             │   │
-│   └─────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
+## Data Model (DynamoDB)
 
----
+### `autonomous-pricing-products`
+- `product_id` (PK)
+- Product pricing inputs and live state (`cost_price`, `current_price`, `competitor_price`, `demand_factor`, etc.)
 
-## AWS Services Used
+### `autonomous-pricing-decisions`
+- `decision_id` (PK)
+- `product_id`, `timestamp`, input/output pricing payloads, validation/monitoring fields
+- GSI: `ProductTimestampIndex` (`product_id`, `timestamp`)
 
-| Category | Service | Purpose |
-|----------|---------|---------|
-| **Generative AI** | Amazon Bedrock (Claude 3 Sonnet) | Reasoning, analysis, explanations |
-| **Compute** | AWS Lambda | Serverless function execution |
-| **Database** | Amazon DynamoDB | Product, decision, correction data |
-| **API** | Amazon API Gateway | REST API for AI interface |
-| **Events** | Amazon EventBridge | Event-driven orchestration |
-| **Queue** | Amazon SQS | Market data buffering |
-| **Logging** | Amazon CloudWatch | Monitoring and logs |
+### `autonomous-pricing-corrections`
+- `correction_id` (PK)
+- `product_id`, deviation/performance payloads, AI analysis, correction status
+- GSI: `ProductIndex` (`product_id`)
 
----
+## AI Usage Pattern (As Built)
 
-## Why This Architecture Wins Technical Points
+- Deterministic path: `market_processor -> pricing_engine -> guardrail_executor -> monitoring_agent`
+- AI path (conditional): `correction_agent` uses Bedrock only on significant deviation.
+- Conversational path: `ai_interface` uses Bedrock for seller queries and summaries.
 
-1. **✅ Bedrock Integration**: Core to decision-making, not cosmetic
-2. **✅ Serverless Pattern**: Lambda + DynamoDB + EventBridge
-3. **✅ Event-Driven**: Loose coupling, scalable
-4. **✅ AI Explanation Layer**: Bedrock reasoning exposed to users
-5. **✅ Autonomous Loop**: Monitor → Correct → Explain
+## AWS Services in Use
+
+| Category | Service | Role in this system |
+|---|---|---|
+| Orchestration | AWS Step Functions | Sequential pricing workflow and branching |
+| Compute | AWS Lambda | Business logic and AI-facing handlers |
+| Database | Amazon DynamoDB | Products, decisions, corrections |
+| API | Amazon API Gateway (HTTP API) | Public backend endpoints |
+| Events | Amazon EventBridge | Ingestion-driven and async event dispatch |
+| AI | Amazon Bedrock (Claude Haiku 4.5) | Correction reasoning + seller-facing explanations |
+| Observability | Amazon CloudWatch + LangSmith | Logs, execution traces, prompt traces |
+
+## Notes
+
+- This reflects the deployed SAM stack in `lambdas/template.yaml` and `lambdas/statemachine/pricing_pipeline.asl.json`.
+- The previous architecture block referenced SQS and older model labels; those are not the primary current path.

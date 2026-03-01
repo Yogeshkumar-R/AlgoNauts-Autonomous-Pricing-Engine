@@ -1,7 +1,7 @@
 """
 Data Ingestion API Lambda Handler
 
-Receives market data from external sources and pushes to SQS for processing.
+Receives market data from external sources and publishes to EventBridge for processing.
 This is the entry point for competitor prices, demand signals, and market trends.
 
 Supports:
@@ -18,18 +18,16 @@ import sys
 from datetime import datetime
 
 # Add shared module to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from shared import setup_logger, generate_timestamp, STATUS_SUCCESS, STATUS_FAILED
 
 logger = setup_logger(__name__)
 
-# Initialize AWS clients
-sqs = boto3.client('sqs')
-eventbridge = boto3.client('events')
+# Initialize AWS EventBridge client with explicit region
+_region = os.environ.get('BEDROCK_REGION', os.environ.get('AWS_REGION', 'us-east-1'))
+eventbridge = boto3.client('events', region_name=_region)
 
-# Environment variables
-SQS_QUEUE_URL = os.environ.get('SQS_QUEUE_URL', '')
 EVENT_BUS_NAME = os.environ.get('EVENT_BUS_NAME', 'autonomous-pricing-event-bus')
 
 
@@ -70,44 +68,6 @@ def validate_market_data(data: Dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-def send_to_sqs(data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Send validated market data to SQS queue for async processing.
-    """
-    try:
-        message_body = {
-            **data,
-            'ingestion_timestamp': generate_timestamp(),
-            'source': data.get('source', 'api_ingestion')
-        }
-
-        response = sqs.send_message(
-            QueueUrl=SQS_QUEUE_URL,
-            MessageBody=json.dumps(message_body),
-            MessageAttributes={
-                'product_id': {
-                    'StringValue': data['product_id'],
-                    'DataType': 'String'
-                },
-                'source': {
-                    'StringValue': data.get('source', 'unknown'),
-                    'DataType': 'String'
-                }
-            }
-        )
-
-        return {
-            'status': STATUS_SUCCESS,
-            'message_id': response['MessageId'],
-            'queue': 'sqs'
-        }
-    except Exception as e:
-        logger.exception(f"Failed to send to SQS: {e}")
-        return {
-            'status': STATUS_FAILED,
-            'error': str(e)
-        }
-
 
 def send_to_eventbridge(data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -141,16 +101,10 @@ def send_to_eventbridge(data: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
-def process_ingestion(event: Dict[str, Any], use_sqs: bool = True) -> Dict[str, Any]:
+def process_ingestion(event: Dict[str, Any]) -> Dict[str, Any]:
     """
     Process incoming market data ingestion request.
-
-    Args:
-        event: API Gateway event or direct invocation
-        use_sqs: If True, send to SQS. If False, send directly to EventBridge.
-
-    Returns:
-        Processing result
+    Publishes to EventBridge which triggers market_processor.
     """
     try:
         # Extract body from API Gateway event
@@ -173,10 +127,7 @@ def process_ingestion(event: Dict[str, Any], use_sqs: bool = True) -> Dict[str, 
                     })
                     continue
 
-                if use_sqs and SQS_QUEUE_URL:
-                    result = send_to_sqs(record)
-                else:
-                    result = send_to_eventbridge(record)
+                result = send_to_eventbridge(record)
 
                 results.append({
                     'product_id': record['product_id'],
@@ -206,10 +157,7 @@ def process_ingestion(event: Dict[str, Any], use_sqs: bool = True) -> Dict[str, 
                 })
             }
 
-        if use_sqs and SQS_QUEUE_URL:
-            result = send_to_sqs(body)
-        else:
-            result = send_to_eventbridge(body)
+        result = send_to_eventbridge(body)
 
         return {
             'statusCode': 200 if result['status'] == STATUS_SUCCESS else 500,
@@ -259,8 +207,13 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     logger.info(f"Ingestion API invoked: {json.dumps(event, default=str)[:500]}")
 
-    # Handle CORS preflight
-    if event.get('httpMethod') == 'OPTIONS':
+    # Handle CORS preflight — supports both REST API (v1) and HttpApi (v2) formats
+    http_method = (
+        event.get('httpMethod')  # REST API v1
+        or event.get('requestContext', {}).get('http', {}).get('method')  # HttpApi v2
+        or ''
+    )
+    if http_method.upper() == 'OPTIONS':
         return {
             'statusCode': 200,
             'headers': {
@@ -271,11 +224,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'body': ''
         }
 
-    # Get query parameters for routing
-    query_params = event.get('queryStringParameters') or {}
-    use_sqs = query_params.get('mode', 'sqs').lower() != 'direct'
-
-    result = process_ingestion(event, use_sqs=use_sqs)
+    result = process_ingestion(event)
 
     # Add CORS headers
     result['headers'] = {

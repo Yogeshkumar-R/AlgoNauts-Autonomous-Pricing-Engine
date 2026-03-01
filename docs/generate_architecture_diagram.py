@@ -9,14 +9,21 @@ Usage:
     python generate_architecture_diagram.py
 """
 
+import os
+
+# Ensure Graphviz bin is on PATH (Windows install location)
+_graphviz_bin = r"C:\Program Files\Graphviz\bin"
+if _graphviz_bin not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = _graphviz_bin + os.pathsep + os.environ.get("PATH", "")
+
 from diagrams import Diagram, Cluster, Edge
 from diagrams.aws.compute import Lambda
-from diagrams.aws.database import DynamoDB
+from diagrams.aws.database import Dynamodb
 from diagrams.aws.integration import Eventbridge, SQS
 from diagrams.aws.ml import Bedrock
 from diagrams.aws.network import APIGateway
 from diagrams.aws.storage import S3
-from diagrams.aws.management import CloudWatch
+from diagrams.aws.management import Cloudwatch
 from diagrams.onprem.client import Client
 from diagrams.generic.blank import Blank
 
@@ -75,7 +82,7 @@ with Diagram(
     with Cluster("AI Layer (Bedrock)", graph_attr={"bgcolor": "#FAF5FF"}):
         correction_agent = Lambda("Correction\nAgent")
         ai_interface = Lambda("AI\nInterface")
-        bedrock = Bedrock("Claude 3\nSonnet")
+        bedrock = Bedrock("Claude Haiku\n4.5")
 
     # Monitoring
     with Cluster("Monitoring", graph_attr={"bgcolor": "#FFFAF0"}):
@@ -83,9 +90,9 @@ with Diagram(
 
     # Data Layer
     with Cluster("Data Layer (DynamoDB)", graph_attr={"bgcolor": "#F5F5F5"}):
-        products_table = DynamoDB("Products")
-        decisions_table = DynamoDB("Decisions")
-        corrections_table = DynamoDB("Corrections")
+        products_table = Dynamodb("Products")
+        decisions_table = Dynamodb("Decisions")
+        corrections_table = Dynamodb("Corrections")
 
     # API Layer
     with Cluster("API Layer", graph_attr={"bgcolor": "#E6FFFA"}):
@@ -134,7 +141,7 @@ with Diagram(
     dashboard >> Edge(label="REST API") >> api_gateway
 
     # CloudWatch (monitoring all)
-    cloudwatch = CloudWatch("CloudWatch\nLogs")
+    cloudwatch = Cloudwatch("CloudWatch\nLogs")
     market_processor >> Edge(style="dashed", color="gray") >> cloudwatch
     pricing_engine >> Edge(style="dashed", color="gray") >> cloudwatch
     correction_agent >> Edge(style="dashed", color="gray") >> cloudwatch
