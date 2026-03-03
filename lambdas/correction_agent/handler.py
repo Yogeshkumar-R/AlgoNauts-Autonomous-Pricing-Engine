@@ -27,6 +27,8 @@ from shared import (
     CORRECTIONS_TABLE,
     BEDROCK_MODEL_ID,
     BEDROCK_REGION,
+    MAX_PRICE_DROP_PERCENT,
+    MIN_MARGIN_PERCENT,
     STATUS_SUCCESS,
     STATUS_FAILED
 )
@@ -36,6 +38,7 @@ db_client = DynamoDBClient()
 
 # Initialize Bedrock client (lazy)
 _bedrock_client = None
+MAX_BEDROCK_TEXT_CHARS = int(os.environ.get('MAX_BEDROCK_TEXT_CHARS', '8000'))
 
 
 def get_bedrock_client():
@@ -47,6 +50,96 @@ def get_bedrock_client():
             region_name=BEDROCK_REGION
         )
     return _bedrock_client
+
+
+def extract_json_object(text: str) -> str:
+    """Extract first JSON object block from model text output."""
+    if not isinstance(text, str):
+        return "{}"
+    cleaned = text.strip()
+    if cleaned.startswith('```json'):
+        cleaned = cleaned[7:]
+    if cleaned.startswith('```'):
+        cleaned = cleaned[3:]
+    if cleaned.endswith('```'):
+        cleaned = cleaned[:-3]
+    cleaned = cleaned.strip()
+    start = cleaned.find('{')
+    end = cleaned.rfind('}')
+    if start == -1 or end == -1 or end <= start:
+        return "{}"
+    return cleaned[start:end + 1]
+
+
+def normalize_ai_response(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and normalize AI response shape."""
+    confidence = str(payload.get('confidence', 'low')).lower()
+    if confidence not in {'high', 'medium', 'low'}:
+        confidence = 'low'
+
+    factors = payload.get('factors', [])
+    if not isinstance(factors, list):
+        factors = [str(factors)]
+    factors = [str(x)[:120] for x in factors][:6]
+
+    recs = payload.get('recommendations', [])
+    if not isinstance(recs, list):
+        recs = [str(recs)]
+    recs = [str(x)[:200] for x in recs][:6]
+
+    revised_price = payload.get('revised_price')
+    if isinstance(revised_price, (int, float)):
+        revised_price = round(float(revised_price), 2)
+    else:
+        revised_price = None
+
+    revised_predicted_sales = payload.get('revised_predicted_sales')
+    if isinstance(revised_predicted_sales, (int, float)):
+        revised_predicted_sales = max(0, int(revised_predicted_sales))
+    else:
+        revised_predicted_sales = None
+
+    revised_predicted_margin = payload.get('revised_predicted_margin')
+    if isinstance(revised_predicted_margin, (int, float)):
+        revised_predicted_margin = round(float(revised_predicted_margin), 2)
+    else:
+        revised_predicted_margin = None
+
+    return {
+        "analysis": str(payload.get('analysis', 'No analysis provided'))[:1000],
+        "factors": factors,
+        "revised_price": revised_price,
+        "revised_predicted_sales": revised_predicted_sales,
+        "revised_predicted_margin": revised_predicted_margin,
+        "confidence": confidence,
+        "explanation": str(payload.get('explanation', 'No explanation provided'))[:2000],
+        "recommendations": recs or ["Manual review required"]
+    }
+
+
+def apply_price_guardrails(ai_response: Dict[str, Any], decision_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Constrain revised price to configured pricing guardrails."""
+    revised_price = ai_response.get('revised_price')
+    if revised_price is None:
+        return ai_response
+
+    input_data = decision_data.get('input_data', {})
+    current_price = float(input_data.get('current_price', 0) or 0)
+    cost_price = float(input_data.get('cost_price', 0) or 0)
+    gst_percent = float(input_data.get('gst_percent', 18) or 18)
+
+    min_floor = cost_price * (1 + gst_percent / 100) * (1 + MIN_MARGIN_PERCENT / 100)
+    min_drop_price = current_price * (1 - MAX_PRICE_DROP_PERCENT / 100) if current_price > 0 else revised_price
+    max_rise_price = current_price * 1.5 if current_price > 0 else revised_price
+
+    guarded = min(revised_price, max_rise_price)
+    guarded = max(guarded, min_floor, min_drop_price)
+    guarded = round(guarded, 2)
+
+    if guarded != revised_price:
+        ai_response["analysis"] = f"{ai_response.get('analysis', '')} Guardrail-adjusted revised price.".strip()
+    ai_response["revised_price"] = guarded
+    return ai_response
 
 
 def build_analysis_prompt(
@@ -133,48 +226,30 @@ def call_bedrock_claude(prompt: str) -> Dict[str, Any]:
     try:
         client = get_bedrock_client()
 
-        # Prepare request body for Claude
-        request_body = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 2000,
-            "temperature": 0.3,  # Lower temperature for more deterministic pricing
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        }
-
         logger.info(f"Calling Bedrock model: {BEDROCK_MODEL_ID}")
 
-        response = client.invoke_model(
+        response = client.converse(
             modelId=BEDROCK_MODEL_ID,
-            contentType='application/json',
-            accept='application/json',
-            body=json.dumps(request_body)
+            system=[{
+                "text": (
+                    "You are a pricing correction model. Return only valid JSON with requested keys. "
+                    "Do not output markdown or prose outside JSON."
+                )
+            }],
+            messages=[{
+                "role": "user",
+                "content": [{"text": prompt}]
+            }],
+            inferenceConfig={
+                "maxTokens": 2000,
+                "temperature": 0.2
+            }
         )
-
-        response_body = json.loads(response['body'].read())
-
-        # Extract content from Claude response
-        content = response_body.get('content', [])
-        if content and len(content) > 0:
-            text_response = content[0].get('text', '{}')
-        else:
-            text_response = '{}'
-
-        # Parse JSON response
-        # Handle potential markdown code blocks
-        text_response = text_response.strip()
-        if text_response.startswith('```json'):
-            text_response = text_response[7:]
-        if text_response.startswith('```'):
-            text_response = text_response[3:]
-        if text_response.endswith('```'):
-            text_response = text_response[:-3]
-
-        parsed_response = json.loads(text_response.strip())
+        content = response.get('output', {}).get('message', {}).get('content', [])
+        text_response = content[0].get('text', '{}') if content else '{}'
+        text_response = text_response[:MAX_BEDROCK_TEXT_CHARS]
+        parsed_response = json.loads(extract_json_object(text_response))
+        parsed_response = normalize_ai_response(parsed_response)
 
         logger.info("Successfully received Bedrock response")
         return parsed_response
@@ -299,6 +374,7 @@ def run_correction(event: Dict[str, Any]) -> Dict[str, Any]:
         # Call Bedrock for AI analysis
         try:
             ai_response = call_bedrock_claude(prompt)
+            ai_response = apply_price_guardrails(ai_response, decision)
             ai_analysis_source = 'bedrock'
         except Exception as e:
             logger.warning(f"Bedrock call failed, using fallback: {e}")

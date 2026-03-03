@@ -17,6 +17,8 @@ DEVIATION_THRESHOLD_PERCENT = float(os.environ.get('DEVIATION_THRESHOLD_PERCENT'
 # Bedrock Configuration
 BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', '')
 BEDROCK_REGION = os.environ.get('BEDROCK_REGION', 'us-east-1')
+BEDROCK_GUARDRAIL_ID = os.environ.get('BEDROCK_GUARDRAIL_ID', '')
+BEDROCK_GUARDRAIL_VERSION = os.environ.get('BEDROCK_GUARDRAIL_VERSION', '')
 
 # Response Status Codes
 STATUS_SUCCESS = 'SUCCESS'

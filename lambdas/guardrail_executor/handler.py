@@ -22,6 +22,8 @@ from shared import (
     DECISIONS_TABLE,
     MIN_MARGIN_PERCENT,
     MAX_PRICE_DROP_PERCENT,
+    MANUAL_APPROVAL_PRICE_CHANGE_PERCENT,
+    MANUAL_APPROVAL_MIN_MARGIN_PERCENT,
     STATUS_SUCCESS,
     STATUS_FAILED,
     STATUS_VALID,
@@ -247,6 +249,7 @@ def execute_guardrails(event: Dict[str, Any]) -> Dict[str, Any]:
         decision_id = event['decision_id']
         product_id = event['product_id']
         auto_apply = event.get('auto_apply', True)
+        force_manual_approval = bool(event.get('force_manual_approval', False))
 
         timestamp = generate_timestamp()
 
@@ -267,21 +270,68 @@ def execute_guardrails(event: Dict[str, Any]) -> Dict[str, Any]:
             result_status = STATUS_VALID
             decision_status = 'approved'
 
-            # Update decision status
-            db_client.update_item(
-                DECISIONS_TABLE,
-                {'decision_id': decision_id},
-                'SET #status = :status, validated_at = :timestamp, validations = :validations',
-                {
-                    ':status': decision_status,
-                    ':timestamp': timestamp,
-                    ':validations': validation_result['validations']
-                },
-                expression_attribute_names={'#status': 'status'}
+            # Governance policy: route high-impact changes to manual approval.
+            price_change_percent = abs(float(decision.get('price_change', {}).get('percent', 0) or 0))
+            predicted_margin = float(decision.get('output_data', {}).get('predicted_margin', 0) or 0)
+            manual_approval_required = (
+                force_manual_approval
+                or price_change_percent >= MANUAL_APPROVAL_PRICE_CHANGE_PERCENT
+                or predicted_margin <= MANUAL_APPROVAL_MIN_MARGIN_PERCENT
             )
 
+            approval_reason = None
+            if force_manual_approval:
+                approval_reason = "Forced manual approval by request"
+            elif price_change_percent >= MANUAL_APPROVAL_PRICE_CHANGE_PERCENT:
+                approval_reason = (
+                    f"Absolute price change {price_change_percent:.2f}% exceeds "
+                    f"manual approval threshold {MANUAL_APPROVAL_PRICE_CHANGE_PERCENT:.2f}%"
+                )
+            elif predicted_margin <= MANUAL_APPROVAL_MIN_MARGIN_PERCENT:
+                approval_reason = (
+                    f"Predicted margin {predicted_margin:.2f}% is below "
+                    f"manual approval floor {MANUAL_APPROVAL_MIN_MARGIN_PERCENT:.2f}%"
+                )
+
+            # Update decision status
+            if manual_approval_required:
+                decision_status = 'pending_approval'
+                db_client.update_item(
+                    DECISIONS_TABLE,
+                    {'decision_id': decision_id},
+                    'SET #status = :status, validated_at = :timestamp, validations = :validations, '
+                    'approval_required = :approval_required, approval_reason = :approval_reason',
+                    {
+                        ':status': decision_status,
+                        ':timestamp': timestamp,
+                        ':validations': validation_result['validations'],
+                        ':approval_required': True,
+                        ':approval_reason': approval_reason
+                    },
+                    expression_attribute_names={'#status': 'status'}
+                )
+            else:
+                db_client.update_item(
+                    DECISIONS_TABLE,
+                    {'decision_id': decision_id},
+                    'SET #status = :status, validated_at = :timestamp, validations = :validations, '
+                    'approval_required = :approval_required',
+                    {
+                        ':status': decision_status,
+                        ':timestamp': timestamp,
+                        ':validations': validation_result['validations'],
+                        ':approval_required': False
+                    },
+                    expression_attribute_names={'#status': 'status'}
+                )
+
             # Apply price if auto_apply is enabled
-            if auto_apply:
+            if manual_approval_required:
+                applied_action = 'manual_approval_required'
+                logger.info(
+                    f"Manual approval required for decision {decision_id}: {approval_reason}"
+                )
+            elif auto_apply:
                 new_price = decision['output_data']['recommended_price']
 
                 db_client.update_item(
@@ -309,6 +359,8 @@ def execute_guardrails(event: Dict[str, Any]) -> Dict[str, Any]:
                 'decision_id': decision_id,
                 'product_id': product_id,
                 'action': applied_action,
+                'manual_approval_required': manual_approval_required,
+                'approval_reason': approval_reason,
                 'new_price': decision['output_data']['recommended_price'] if auto_apply else None,
                 'validations': validation_result['validations'],
                 'timestamp': timestamp

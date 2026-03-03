@@ -13,6 +13,12 @@ CORRECTIONS_TABLE = os.environ.get('CORRECTIONS_TABLE', 'price_corrections')
 MIN_MARGIN_PERCENT = float(os.environ.get('MIN_MARGIN_PERCENT', '5.0'))  # Minimum 5% margin
 MAX_PRICE_DROP_PERCENT = float(os.environ.get('MAX_PRICE_DROP_PERCENT', '25.0'))  # Max 25% drop
 DEVIATION_THRESHOLD_PERCENT = float(os.environ.get('DEVIATION_THRESHOLD_PERCENT', '20.0'))  # 20% deviation
+MANUAL_APPROVAL_PRICE_CHANGE_PERCENT = float(
+    os.environ.get('MANUAL_APPROVAL_PRICE_CHANGE_PERCENT', '20.0')
+)  # Manual review if absolute price change exceeds this
+MANUAL_APPROVAL_MIN_MARGIN_PERCENT = float(
+    os.environ.get('MANUAL_APPROVAL_MIN_MARGIN_PERCENT', '8.0')
+)  # Manual review if predicted margin falls below this
 
 # Bedrock Configuration
 BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', '')

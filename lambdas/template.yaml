@@ -24,8 +24,10 @@ Globals:
         MIN_MARGIN_PERCENT: '5.0'
         MAX_PRICE_DROP_PERCENT: '25.0'
         DEVIATION_THRESHOLD_PERCENT: '20.0'
-        BEDROCK_MODEL_ID: 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
+        BEDROCK_MODEL_ID: 'us.amazon.nova-2-lite-v1:0'
         BEDROCK_REGION: !Ref AWS::Region
+        BEDROCK_GUARDRAIL_ID: ''
+        BEDROCK_GUARDRAIL_VERSION: ''
         EVENT_BUS_NAME: !Ref PricingEventBus
         LANGSMITH_TRACING_V2: 'true'
         LANGSMITH_PROJECT: 'autonomous-pricing-engine'

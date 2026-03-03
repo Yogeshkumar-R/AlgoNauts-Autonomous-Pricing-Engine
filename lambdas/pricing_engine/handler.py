@@ -11,6 +11,7 @@ from typing import Any, Dict
 import sys
 import os
 import math
+from botocore.exceptions import ClientError
 
 # Add shared module to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -152,7 +153,21 @@ def run_pricing_engine(event: Dict[str, Any], trigger_next: bool = True) -> Dict
 
         product_id = event['product_id']
         timestamp = generate_timestamp()
-        decision_id = generate_decision_id(product_id, timestamp)
+
+        # Deterministic idempotency seed:
+        # - Step Functions execution id when available
+        # - event timestamp for EventBridge style calls
+        # - fallback to current timestamp for ad-hoc/manual invokes
+        execution_id = str(event.get('_pipeline_execution_id') or '').strip()
+        event_timestamp = str(event.get('timestamp') or '').strip()
+        if execution_id:
+            seed = execution_id.split(':')[-1]
+        elif event_timestamp:
+            seed = event_timestamp
+        else:
+            seed = timestamp
+        seed = seed.replace(':', '-').replace('.', '-').replace('/', '-')
+        decision_id = f"decision_{product_id}_{seed}"
 
         # Get existing product data
         product = db_client.get_item(PRODUCTS_TABLE, {'product_id': product_id})
@@ -215,10 +230,40 @@ def run_pricing_engine(event: Dict[str, Any], trigger_next: bool = True) -> Dict
             'created_at': timestamp
         }
 
-        # Store decision in DynamoDB
-        db_client.put_item(DECISIONS_TABLE, decision)
-
-        logger.info(f"Generated pricing decision {decision_id} for product {product_id}")
+        # Store decision in DynamoDB with idempotency guard.
+        # If the same decision_id is written twice (retries/duplicate invokes),
+        # second write is ignored and treated as success.
+        try:
+            db_client.put_item(
+                DECISIONS_TABLE,
+                decision,
+                condition_expression='attribute_not_exists(decision_id)'
+            )
+            logger.info(f"Generated pricing decision {decision_id} for product {product_id}")
+        except ClientError as e:
+            if e.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
+                logger.warning(f"Duplicate pricing decision suppressed for {decision_id}")
+                existing = db_client.get_item(DECISIONS_TABLE, {'decision_id': decision_id}) or decision
+                decision = existing
+                pricing_output = existing.get('output_data', {})
+                change_output = existing.get('price_change', {})
+                return {
+                    'status': STATUS_SUCCESS,
+                    'decision_id': decision_id,
+                    'product_id': product_id,
+                    'recommended_price': pricing_output.get('recommended_price'),
+                    'predicted_margin': pricing_output.get('predicted_margin'),
+                    'predicted_sales': pricing_output.get('predicted_sales'),
+                    'price_change': {
+                        'absolute': change_output.get('absolute'),
+                        'percent': change_output.get('percent')
+                    },
+                    'pricing_strategy': existing.get('pricing_strategy'),
+                    'next_step': 'Submit to guardrail_executor for validation',
+                    'timestamp': existing.get('timestamp', timestamp),
+                    'idempotent_reuse': True
+                }
+            raise
 
         # In Step Functions mode, orchestration already calls the next stage.
         if trigger_next:

@@ -36,6 +36,7 @@
             "Comment": "Calculate recommended price using deterministic logic (cost + GST + demand + competition)",
             "Parameters": {
                 "product_id.$": "$.product_id",
+                "_pipeline_execution_id.$": "$$.Execution.Id",
                 "_sf_mode": true
             },
             "ResultPath": "$.pricing",
