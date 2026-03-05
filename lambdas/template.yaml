@@ -24,6 +24,8 @@ Globals:
         MIN_MARGIN_PERCENT: '5.0'
         MAX_PRICE_DROP_PERCENT: '25.0'
         DEVIATION_THRESHOLD_PERCENT: '20.0'
+        MANUAL_APPROVAL_PRICE_CHANGE_PERCENT: '20.0'
+        MANUAL_APPROVAL_MIN_MARGIN_PERCENT: '8.0'
         BEDROCK_MODEL_ID: 'us.amazon.nova-2-lite-v1:0'
         BEDROCK_REGION: !Ref AWS::Region
         BEDROCK_GUARDRAIL_ID: ''
@@ -456,6 +458,61 @@ Resources:
             Path: /seed
             Method: POST
 
+  # 10. QUERY API — Frontend GET endpoints (MVP)
+  QueryAPIFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: autonomous-pricing-query-api
+      CodeUri: query_api/
+      Handler: handler.lambda_handler
+      Description: Handles all GET requests for frontend dashboard
+      MemorySize: 256
+      Timeout: 30
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ProductsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref DecisionsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref CorrectionsTable
+      Events:
+        GetProducts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PricingAPI
+            Path: /products
+            Method: GET
+        GetProductDetail:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PricingAPI
+            Path: /products/{id}
+            Method: GET
+        GetDashboardKPIs:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PricingAPI
+            Path: /dashboard/kpis
+            Method: GET
+        GetRecentDecisions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PricingAPI
+            Path: /decisions/recent
+            Method: GET
+        GetAlerts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PricingAPI
+            Path: /alerts
+            Method: GET
+        GetRevenueAnalytics:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PricingAPI
+            Path: /analytics/revenue
+            Method: GET
+
 # ============================================================
 # OUTPUTS
 # ============================================================
@@ -503,3 +560,11 @@ Outputs:
   PricingEventBusName:
     Description: Custom EventBridge Bus
     Value: !Ref PricingEventBus
+
+  ProductsEndpoint:
+    Description: GET products list
+    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/products'
+
+  DashboardKPIsEndpoint:
+    Description: GET dashboard KPIs
+    Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/dashboard/kpis'

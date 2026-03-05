@@ -93,7 +93,19 @@
                     "Next": "PipelineFailed"
                 }
             ],
-            "Next": "RunMonitoring"
+            "Next": "GuardrailOutcome"
+        },
+        "GuardrailOutcome": {
+            "Type": "Choice",
+            "Comment": "Continue only when guardrail applied price automatically",
+            "Choices": [
+                {
+                    "Variable": "$.guardrail.action",
+                    "StringEquals": "price_applied",
+                    "Next": "RunMonitoring"
+                }
+            ],
+            "Default": "PipelineSucceeded"
         },
         "RunMonitoring": {
             "Type": "Task",

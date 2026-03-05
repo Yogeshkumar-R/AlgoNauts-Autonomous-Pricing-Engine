@@ -361,7 +361,11 @@ def execute_guardrails(event: Dict[str, Any]) -> Dict[str, Any]:
                 'action': applied_action,
                 'manual_approval_required': manual_approval_required,
                 'approval_reason': approval_reason,
-                'new_price': decision['output_data']['recommended_price'] if auto_apply else None,
+                'new_price': (
+                    decision['output_data']['recommended_price']
+                    if (auto_apply and not manual_approval_required)
+                    else None
+                ),
                 'validations': validation_result['validations'],
                 'timestamp': timestamp
             }
