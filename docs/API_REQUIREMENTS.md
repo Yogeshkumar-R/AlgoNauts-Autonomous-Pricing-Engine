@@ -374,6 +374,6 @@ x-api-key: <API_KEY> (if using API Gateway key)
 
 **Environment Variables:**
 ```env
-API_GATEWAY_URL=https://your-api-id.execute-api.region.amazonaws.com/prod
+API_BASE=https://your-api-id.execute-api.region.amazonaws.com/prod
 API_GATEWAY_KEY=your-api-key (optional)
 ```

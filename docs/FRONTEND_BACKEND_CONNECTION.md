@@ -26,8 +26,8 @@ cd ../frontend
 
 Create file `frontend/.env.local`:
 ```env
-NEXT_PUBLIC_API_URL=https://abc123xyz.execute-api.us-east-1.amazonaws.com
-API_GATEWAY_URL=https://abc123xyz.execute-api.us-east-1.amazonaws.com
+API_BASE=https://abc123xyz.execute-api.us-east-1.amazonaws.com
+API_BASE=https://abc123xyz.execute-api.us-east-1.amazonaws.com
 ```
 
 ---
@@ -39,7 +39,7 @@ The frontend already has API routes in `frontend/app/api/*` that need to proxy t
 Update `frontend/lib/backend.ts`:
 
 ```typescript
-const BACKEND_URL = process.env.API_GATEWAY_URL || process.env.NEXT_PUBLIC_API_URL || ""
+const BACKEND_URL = process.env.API_BASE || process.env.API_BASE || ""
 ```
 
 This file already exists and should work automatically once you set the env variable.
@@ -116,7 +116,7 @@ curl $API_URL/analytics/revenue
 cat frontend/.env.local
 
 # Should show:
-# NEXT_PUBLIC_API_URL=https://...
+# API_BASE=https://...
 ```
 
 ### Issue: CORS errors in browser
@@ -165,7 +165,7 @@ sam build && sam deploy
 
 # 3. Configure frontend
 cd ../frontend
-echo "NEXT_PUBLIC_API_URL=https://abc123.execute-api.us-east-1.amazonaws.com" > .env.local
+echo "API_BASE=https://abc123.execute-api.us-east-1.amazonaws.com" > .env.local
 
 # 4. Install & run
 pnpm install
@@ -215,8 +215,8 @@ Set via SAM template - already configured:
 
 ### Frontend (Next.js)
 Set in `.env.local`:
-- `NEXT_PUBLIC_API_URL` - Your API Gateway URL
-- `API_GATEWAY_URL` - Same URL (for server-side)
+- `API_BASE` - Your API Gateway URL
+- `API_BASE` - Same URL (for server-side)
 
 ---
 
@@ -240,7 +240,7 @@ vercel --prod
 ```
 
 Set environment variable in Vercel dashboard:
-- `NEXT_PUBLIC_API_URL` = your API Gateway URL
+- `API_BASE` = your API Gateway URL
 
 ### Backend (AWS)
 Already deployed via SAM!

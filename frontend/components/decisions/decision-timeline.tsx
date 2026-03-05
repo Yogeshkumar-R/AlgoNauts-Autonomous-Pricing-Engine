@@ -81,8 +81,8 @@ export function DecisionTimeline() {
 
       <div className="space-y-4">
         {entries.map((entry) => {
-          const type = typeConfig[entry.type]
-          const status = statusConfig[entry.status]
+          const type = typeConfig[entry.type] || typeConfig.deterministic
+          const status = statusConfig[entry.status] || statusConfig.info
           const isExpanded = expanded[entry.id]
           const TypeIcon = type.icon
           const StatusIcon = status.icon

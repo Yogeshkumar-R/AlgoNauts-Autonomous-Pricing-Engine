@@ -48,6 +48,8 @@ export async function POST(request: Request) {
     const data = await backendFetch<AIQueryResponse>("/ai/query", {
       method: "POST",
       body: JSON.stringify({
+        query_type: "query",
+        seller_id: "SELLER-001",
         query: sanitizedQuery,
         conversationId: body.conversationId,
         context: body.context,

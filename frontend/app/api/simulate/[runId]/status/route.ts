@@ -8,15 +8,6 @@ export async function GET(
 ) {
   const { runId } = await params
   try {
-    if (!isBackendConnected()) {
-      // In demo mode, pipeline is driven client-side
-      return NextResponse.json({
-        runId,
-        status: "SUCCEEDED",
-        steps: [],
-      } satisfies SimulationStatusResponse)
-    }
-
     const data = await backendFetch<SimulationStatusResponse>(
       `/simulate/${runId}/status`
     )

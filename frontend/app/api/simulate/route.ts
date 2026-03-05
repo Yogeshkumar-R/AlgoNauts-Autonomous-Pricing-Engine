@@ -20,11 +20,20 @@ export async function POST(request: Request) {
       } satisfies SimulateResponse)
     }
 
-    const data = await backendFetch<SimulateResponse>("/simulate", {
+    const data = await backendFetch<any>("/simulate", {
       method: "POST",
       body: JSON.stringify(body),
     })
-    return NextResponse.json(data)
+    
+    // Extract runId from execution_arn
+    const executionArn = data.execution_arn || data.executionArn || ""
+    const runId = executionArn.split(':').pop() || `sim-${Date.now()}`
+    
+    return NextResponse.json({
+      runId,
+      executionArn,
+      status: "RUNNING"
+    } satisfies SimulateResponse)
   } catch (error) {
     console.error("[api/simulate]", error)
     return NextResponse.json({ error: "Simulation failed to start" }, { status: 500 })

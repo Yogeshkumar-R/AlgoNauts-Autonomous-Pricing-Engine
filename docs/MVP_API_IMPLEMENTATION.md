@@ -34,7 +34,7 @@ After deployment, you'll get API Gateway URL. Set in frontend:
 
 ```bash
 # frontend/.env.local
-API_GATEWAY_URL=https://xxxxx.execute-api.us-east-1.amazonaws.com
+API_BASE=https://xxxxx.execute-api.us-east-1.amazonaws.com
 ```
 
 ---

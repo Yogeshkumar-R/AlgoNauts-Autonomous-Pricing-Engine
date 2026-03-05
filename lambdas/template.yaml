@@ -468,6 +468,9 @@ Resources:
       Description: Handles all GET requests for frontend dashboard
       MemorySize: 256
       Timeout: 30
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: !Ref PricingStateMachine
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref ProductsTable
@@ -475,6 +478,11 @@ Resources:
             TableName: !Ref DecisionsTable
         - DynamoDBReadPolicy:
             TableName: !Ref CorrectionsTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - states:DescribeExecution
+            Resource: !Sub '${PricingStateMachine}:*'
       Events:
         GetProducts:
           Type: HttpApi
@@ -511,6 +519,18 @@ Resources:
           Properties:
             ApiId: !Ref PricingAPI
             Path: /analytics/revenue
+            Method: GET
+        GetDecisionLog:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PricingAPI
+            Path: /decisions/log
+            Method: GET
+        GetSimulationStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PricingAPI
+            Path: /simulate/{runId}/status
             Method: GET
 
 # ============================================================

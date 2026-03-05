@@ -8,8 +8,16 @@ export async function GET() {
     if (!isBackendConnected()) {
       return NextResponse.json(mockDecisionLog)
     }
-    const data = await backendFetch<DecisionLogEntry[]>("/decisions/log")
-    return NextResponse.json(data)
+    
+    // Try /decisions/log first, fallback to /decisions/recent
+    try {
+      const data = await backendFetch<DecisionLogEntry[]>("/decisions/log")
+      return NextResponse.json(data)
+    } catch (error) {
+      // Fallback to recent decisions if log endpoint doesn't exist
+      const data = await backendFetch<DecisionLogEntry[]>("/decisions/recent")
+      return NextResponse.json(data)
+    }
   } catch (error) {
     console.error("[api/decisions/log]", error)
     return NextResponse.json(mockDecisionLog)

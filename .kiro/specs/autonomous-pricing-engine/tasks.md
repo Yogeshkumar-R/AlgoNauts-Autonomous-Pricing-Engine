@@ -1,195 +1,161 @@
 # Implementation Plan: Seller-Focused Autonomous Pricing Engine
 
-## Overview
+**Timeline**: 2 days (March 6-7, 2025)  
+**Submission**: March 8 afternoon  
+**Goal**: Demo seller-focused pricing assistant for Indian SMEs
 
-This implementation focuses on what sellers see and do, not how the system is built. Each task delivers visible value to sellers, helping them maximize profits with simple, actionable guidance.
+---
 
-## Tasks
+## Day 1: March 6 (Today) - Core Dashboard & Profit Visibility
 
-- [ ] 1. Build profit-first dashboard
-  - [ ] 1.1 Create main dashboard layout showing top 5 products by profit
-    - Display product name, current profit, profit margin percentage, recommendation, and confidence score
-    - Highlight products with profit below 15% in yellow and below 10% in red
-    - Show weekly profit trend (up/down compared to last week)
-    - _Requirements: 1.1, 12.1, 12.2, 12.3_
-  
-  - [ ] 1.2 Add profit calculation display for each product
-    - Show current price excluding GST
-    - Show price including GST with GST rate clearly labeled
-    - Show cost and profit amount with margin percentage
-    - _Requirements: 1.2, 7.1, 7.2, 7.5_
+### Morning (4 hours) - Dashboard & Profit
+- [ ] **Task 1.1**: Create profit-first dashboard layout
+  - Main dashboard showing top 5 products by profit
+  - Display: product name, current profit, profit margin %, recommendation, confidence score
+  - Highlight products with profit below 15% in yellow, below 10% in red
+  - Show weekly profit trend (up/down vs last week)
+  - Show count of products needing attention
 
-- [ ] 2. Implement competitor price comparison UI
-  - [ ] 2.1 Add competitor price display for each product
-    - Show local market average price and number of local sellers
-    - Show online platform average price and number of online sellers
-    - Show lowest and highest competitor prices
-    - _Requirements: 2.1, 2.2, 2.4_
-  
-  - [ ] 2.2 Add competitor position indicator
-    - Show how your price compares to local market average (percentage above/below)
-    - Show how your price compares to online average (percentage above/below)
-    - _Requirements: 2.3, 2.4_
+- [ ] **Task 1.2**: Add profit calculation display
+  - Show current price excluding GST
+  - Show price including GST with GST rate clearly labeled
+  - Show cost and profit amount with margin percentage
+  - Calculate profit: `price - (cost * 1.18) - platform_fees`
 
-- [ ] 3. Implement recommendation display (Keep/Lower/Raise)
-  - [ ] 3.1 Create recommendation card UI
-    - Display one of three actions: Keep, Lower, or Raise
-    - Show recommended price if action is not Keep
-    - Show expected profit impact as percentage change
-    - _Requirements: 3.1, 3.2_
-  
-  - [ ] 3.2 Add recommendation explanation section
-    - Show simple explanation in plain language
-    - Include what changed and why it matters
-    - Show expected profit impact for Keep, Lower, and Raise options
-    - _Requirements: 4.1, 4.2, 4.3_
+- [ ] **Task 1.3**: Add competitor price comparison
+  - Add competitor price display for each product
+  - Show local market average price
+  - Show online platform average price
+  - Show lowest and highest competitor prices
+  - Show how your price compares to averages (percentage above/below)
 
-- [ ] 4. Add simple explanation generation
-  - [ ] 4.1 Build plain-language explanation generator
-    - Generate explanations for Keep recommendations
-    - Generate explanations for Lower recommendations
-    - Generate explanations for Raise recommendations
-    - Use seller-friendly language (avoid technical terms)
-    - _Requirements: 4.1, 4.4_
-  
-  - [ ] 4.2 Add competitor action explanations
-    - Explain when competitor prices changed (e.g., "Competitor lowered price by ₹50")
-    - Explain why competitor changes matter to the seller
-    - _Requirements: 4.3, 4.5_
+- [ ] **Task 1.4**: Implement recommendation display
+  - Create recommendation card UI
+  - Display one of three actions: Keep, Lower, or Raise
+  - Show recommended price if action is not Keep
+  - Show expected profit impact as percentage change
 
-- [ ] 5. Implement weekly profit tracking dashboard
-  - [ ] 5.1 Create weekly profit summary view
-    - Show current week total profit
-    - Show previous week total profit
-    - Show change amount and percentage
-    - _Requirements: 5.1, 5.2_
-  
-  - [ ] 5.2 Add top profit drivers section
-    - Show which products contributed most to profit changes
-    - Show number of price adjustments per product
-    - _Requirements: 5.3, 5.4_
+**Goal**: Working dashboard showing profit, competitors, recommendations
 
-- [ ] 6. Add GST visibility in all calculations
-  - [ ] 6.1 Implement GST display for all prices
-    - Show price excluding GST
-    - Show price including GST
-    - Display applicable GST rate (5%, 12%, 18%, or 28%)
-    - _Requirements: 7.1, 7.2_
-  
-  - [ ] 6.2 Add GST grouping for products
-    - Group products by GST category in dashboard
-    - Show GST category label for each product
-    - _Requirements: 7.3_
+### Afternoon (5 hours) - Explanations & Trust
+- [ ] **Task 2.1**: Build simple explanation generator
+  - Generate explanations for Keep recommendations
+  - Generate explanations for Lower recommendations
+  - Generate explanations for Raise recommendations
+  - Use seller-friendly language (avoid technical terms)
 
-- [ ] 7. Implement festival season awareness
-  - [ ] 7.1 Add festival season indicator to dashboard
-    - Show active festival season (Diwali, Holi, Eid, etc.)
-    - Display festival impact on pricing strategy
-    - _Requirements: 8.1, 8.2_
-  
-  - [ ] 7.2 Create festival-specific pricing guidance
-    - Show festival pricing recommendations for relevant products
-    - Display historical sales data from previous festival seasons when requested
-    - _Requirements: 8.3, 8.4_
+- [ ] **Task 2.2**: Add confidence score display
+  - Add confidence score to recommendation cards
+  - Display score as percentage (0-100%)
+  - Show color coding: green (80%+), yellow (70-79%), red (<70%)
+  - Show what factors contributed to confidence score
 
-- [ ] 8. Add regional price variations support
-  - [ ] 8.1 Implement market type selector
-    - Allow switching between local market and online platform
-    - Show competitor prices specific to selected market
-    - _Requirements: 9.1, 9.2_
-  
-  - [ ] 8.2 Add regional price comparison
-    - Show price differences between local and online markets
-    - Recommend region-specific pricing when data available
-    - _Requirements: 9.3, 9.4_
+- [ ] **Task 2.3**: Implement GST visibility
+  - Implement GST display for all prices
+  - Show price excluding GST
+  - Show price including GST
+  - Display applicable GST rate (5%, 12%, 18%, or 28%)
 
-- [ ] 9. Implement 1-click price adjustment
-  - [ ] 9.1 Create price adjustment workflow
-    - Add "Adjust Price" button to product cards
-    - Show confirmation screen with new price, profit impact, and explanation
-    - Apply change with one click after confirmation
-    - _Requirements: 10.1, 10.2, 10.3_
-  
-  - [ ] 9.2 Add undo functionality (5 minutes)
-    - Show "Undo Last Change" button for 5 minutes after adjustment
-    - Restore previous price and profit calculations when clicked
-    - _Requirements: 10.4_
+- [ ] **Task 2.4**: Add festival season awareness
+  - Add festival season indicator to dashboard
+  - Show active festival season (Diwali, Holi, Eid, etc.)
+  - Display festival impact on pricing strategy
 
-- [ ] 10. Implement competitor price notifications
-  - [ ] 10.1 Create notification display
-    - Show count of products needing attention
-    - Display notification when competitor prices change by more than 5%
-    - Show time since last check
-    - _Requirements: 11.1, 11.5_
-  
-  - [ ] 10.2 Add detailed notification card
-    - Show which competitor changed price
-    - Show which product was affected
-    - Show old price, new price, and recommended action
-    - _Requirements: 11.2, 11.3_
+**Goal**: Sellers understand why recommendations are made
 
-- [ ] 11. Implement confidence score display
-  - [ ] 11.1 Add confidence score to recommendation cards
-    - Display score as percentage (0-100%)
-    - Show color coding: green (80%+), yellow (70-79%), red (<70%)
-    - _Requirements: 6.1_
-  
-  - [ ] 11.2 Add confidence factors explanation
-    - Show what factors contributed to the confidence score
-    - Explain when confidence score changes significantly
-    - _Requirements: 6.2, 6.4_
+---
 
-- [ ] 12. Add explanation transparency
-  - [ ] 12.1 Create "Why This Matters" section
-    - Connect recommendations to seller's goals (more profit, more sales)
-    - Explain expected impact in simple terms
-    - _Requirements: 4.2_
-  
-  - [ ] 12.2 Add historical accuracy display
-    - Show historical accuracy for similar products
-    - Display how often recommendations matched actual outcomes
-    - _Requirements: 6.5_
+## Day 2: March 7 - Quick Actions & Demo
 
-- [ ] 13. Implement real-time dashboard updates
-  - [ ] 13.1 Add real-time profit calculation
-    - Update profit immediately when price changes
-    - Show real-time margin percentage updates
-    - _Requirements: 10.5_
-  
-  - [ ] 13.2 Add dashboard refresh indicator
-    - Show when dashboard was last updated
-    - Show notification if data is older than 24 hours
-    - _Requirements: 1.5, 12.5_
+### Morning (4 hours) - Quick Actions
+- [ ] **Task 2.5**: Implement 1-click price adjustment
+  - Add "Adjust Price" button to product cards
+  - Show confirmation screen with new price, profit impact, explanation
+  - Apply change with one click after confirmation
+  - Show "Undo Last Change" button for 5 minutes after adjustment
 
-- [ ] 14. Test seller workflows
-  - [ ] 14.1 Test daily price check workflow
-    - Verify dashboard shows all products with profit
-    - Verify recommendations are displayed correctly
-    - Verify explanations are in plain language
-    - _Requirements: 1.1-1.5, 2.1-2.4, 3.1-3.4, 4.1-4.5, 5.1-5.5, 6.1-6.5, 7.1-7.5, 8.1-8.5, 9.1-9.5, 10.1-10.5, 11.1-11.5, 12.1-12.5_
-  
-  - [ ] 14.2 Test quick price adjustment workflow
-    - Verify one-click adjustment works
-    - Verify undo functionality within 5 minutes
-    - Verify dashboard updates immediately
-    - _Requirements: 10.1-10.5_
+- [ ] **Task 2.6**: Create weekly profit summary
+  - Create weekly profit summary view
+  - Show current week total profit
+  - Show previous week total profit
+  - Show change amount and percentage
+  - Show which products contributed most to profit changes
 
-- [ ] 15. Prepare demo scenario
-  - [ ] 15.1 Create demo product catalog
-    - Include products with various profit margins
-    - Include products with different recommendation types
-    - Include products in festival season
-    - _Requirements: All_
-  
-  - [ ] 15.2 Create demo script
-    - Walk through daily price check
-    - Demonstrate quick price adjustment
-    - Show weekly profit report
-    - _Requirements: All_
+- [ ] **Task 2.7**: Prepare demo scenario
+  - Create demo product catalog with various profit margins
+  - Create demo scenario script
+  - Test end-to-end seller workflow
+
+**Goal**: Sellers can adjust prices and see impact
+
+### Afternoon (5 hours) - Polish & Demo
+- [ ] Test end-to-end seller workflow
+- [ ] Fix any issues
+- [ ] Prepare 5-minute demo walkthrough
+- [ ] Write Q&A responses
+- [ ] Final documentation review
+
+**Goal**: Demo-ready system
+
+---
+
+## What to Show in Demo (5 minutes)
+
+1. **Open dashboard** - Show profit per product
+2. **Show recommendation** - "Wireless Mouse: Keep - 85%"
+3. **Click "Why?"** - Show simple explanation
+4. **Adjust price** - Click "Lower" → one click → price updated
+5. **Show weekly report** - "Profit up 12% vs last week"
+
+---
+
+## Success Criteria (2-Day Timeline)
+
+### Must Have (Demo Blockers)
+- [ ] Dashboard shows profit per product
+- [ ] Competitor comparison visible
+- [ ] Recommendations (Keep/Lower/Raise) displayed
+- [ ] Simple explanations for recommendations
+- [ ] Confidence scores visible
+- [ ] GST calculations visible
+- [ ] 1-click price adjustment works
+- [ ] Weekly profit summary working
+
+### Nice to Have (If Time Permits)
+- [ ] Regional price variations
+- [ ] Competitor price notifications
+- [ ] Advanced festival awareness
+
+---
+
+## Key Messages for Judges
+
+**What it does**: "A pricing assistant that helps small Indian sellers make smarter pricing decisions that maximize profits while staying competitive."
+
+**Why it matters**: "Indian SMEs manually check competitor prices 1-2 times per week. Our system monitors continuously and makes recommendations in minutes."
+
+**Business impact**: "Expected 10-15% profit margin improvement within 30 days. Sellers can check all products in 5 minutes instead of hours."
+
+**Technical differentiator**: "Built on AWS Lambda, Step Functions, and Bedrock. AI provides explanations, but deterministic logic handles 90% of decisions for speed and cost."
+
+---
+
+## What NOT to Show
+
+❌ Lambda functions  
+❌ EventBridge rules  
+❌ DynamoDB tables  
+❌ Pipeline stages  
+❌ API endpoints  
+
+**Focus on what sellers see, not how it's built.**
+
+---
 
 ## Notes
 
+- Focus on what sellers see, not technical implementation
 - Each task delivers visible value to sellers
-- All tasks focus on what sellers see and do, not technical implementation
-- Tasks can be completed in any order within each phase
-- Checkpoints ensure seller workflows work correctly before moving to next phase
+- Tasks can be completed in any order within each day
+- Demo must show complete seller workflow in <5 minutes
+- All explanations must be in plain language, no technical jargon
