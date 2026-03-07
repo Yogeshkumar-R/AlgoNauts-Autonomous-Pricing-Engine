@@ -49,7 +49,7 @@ export function ConnectionBanner() {
           </span>
         )}
       </div>
-      <Button
+      {/* <Button
         variant="ghost"
         size="sm"
         onClick={handleSeed}
@@ -62,7 +62,7 @@ export function ConnectionBanner() {
           <Database className="h-3 w-3" />
         )}
         Seed Data
-      </Button>
+      </Button> */}
     </div>
   )
 }

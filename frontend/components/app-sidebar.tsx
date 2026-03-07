@@ -18,7 +18,7 @@ import { useState } from "react"
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/products", label: "Products", icon: Package },
-  { href: "/ai-chat", label: "AI Pricing", icon: MessageSquare },
+  { href: "/ai-chat", label: "AI Pricing Assistant", icon: MessageSquare },
   { href: "/decisions", label: "Decision Log", icon: ScrollText },
   { href: "/simulation", label: "Simulation", icon: FlaskConical },
 ]
@@ -68,6 +68,26 @@ export function AppSidebar() {
             </Link>
           )
         })}
+
+        {pathname?.startsWith("/ai-chat") && (
+          <>
+            <div className="my-2 border-t border-border" />
+            {!collapsed && (
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                Conversations
+              </div>
+            )}
+            <div
+              className={cn(
+                "group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 bg-secondary/50 text-sidebar-foreground",
+                collapsed ? "justify-center" : "gap-3"
+              )}
+            >
+              <MessageSquare className="h-4 w-4 shrink-0" />
+              {!collapsed && <span>Current Session</span>}
+            </div>
+          </>
+        )}
       </nav>
 
       <div className="border-t border-border p-3">
