@@ -31,6 +31,7 @@ from shared import (
     PRODUCTS_TABLE,
     DECISIONS_TABLE,
     CORRECTIONS_TABLE,
+    CHAT_HISTORY_TABLE,
     BEDROCK_MODEL_ID,
     BEDROCK_REGION,
     BEDROCK_GUARDRAIL_ID,
@@ -411,18 +412,21 @@ def handle_natural_language_query(event: Dict[str, Any]) -> Dict[str, Any]:
         "query_type": "query",
         "seller_id": "SELLER-001",
         "query": "Why is my iPhone case priced at ₹299?",
-        "product_id": "PROD-001" (optional)
+        "product_id": "PROD-001" (optional),
+        "conversation_id": "CONV-123" (optional)
     }
     """
     try:
-        validate_required_fields(event, ['seller_id', 'query'])
-
-        seller_id = event['seller_id']
-        query = sanitize_user_text(event['query'], MAX_QUERY_CHARS)
-        product_id = event.get('product_id')
-
+        # Default seller_id for MVP if not provided
+        seller_id = event.get('seller_id', 'SELLER-001')
+        query = event.get('query', '')
+        
         if not query:
-            raise ValueError("Query cannot be empty")
+            raise ValueError("Query is required")
+        
+        query = sanitize_user_text(query, MAX_QUERY_CHARS)
+        product_id = event.get('product_id')
+        conversation_id = event.get('conversation_id', f"CONV-{generate_timestamp().replace(':', '').replace('-', '')[:16]}")
 
         if is_prompt_injection_attempt(query):
             logger.warning(f"Prompt injection attempt blocked for seller {seller_id}")
@@ -436,35 +440,60 @@ def handle_natural_language_query(event: Dict[str, Any]) -> Dict[str, Any]:
         decision_data = None
 
         if product_id:
-            product_data = db_client.get_item(PRODUCTS_TABLE, {'product_id': product_id})
-            # Get recent decision for this product
-            decisions = db_client.scan(
-                DECISIONS_TABLE,
-                filter_expression='product_id = :pid',
-                expression_values={':pid': product_id},
-                limit=1
-            )
-            if decisions:
-                decision_data = decisions[0]
+            try:
+                product_data = db_client.get_item(PRODUCTS_TABLE, {'product_id': product_id})
+                # Get recent decision for this product
+                decisions = db_client.scan(
+                    DECISIONS_TABLE,
+                    filter_expression='product_id = :pid',
+                    expression_values={':pid': product_id},
+                    limit=1
+                )
+                if decisions:
+                    decision_data = decisions[0]
+            except Exception as e:
+                logger.warning(f"Could not fetch product data: {e}")
 
-        products = get_seller_products(seller_id)
+        try:
+            products = get_seller_products(seller_id)
+        except Exception as e:
+            logger.warning(f"Could not fetch seller products: {e}")
+            products = []
 
         seller_context = {
             'business_name': event.get('business_name', 'Your Business'),
             'total_products': len(products),
-            'avg_margin': sum(p.get('margin', 10) for p in products) / max(len(products), 1)
+            'avg_margin': sum(p.get('margin', 10) for p in products) / max(len(products), 1) if products else 10
         }
 
         # Build prompt and call AI
         prompt = build_query_prompt(query, product_data, decision_data, seller_context)
         ai_response = call_bedrock(prompt)
+        
+        timestamp = generate_timestamp()
+
+        # Store conversation in dedicated chat history table.
+        try:
+            conversation_item = {
+                'conversation_id': conversation_id,
+                'seller_id': seller_id,
+                'query': query,
+                'response': ai_response,
+                'product_id': product_id,
+                'timestamp': timestamp,
+                'type': 'ai_conversation'
+            }
+            db_client.put_item(CHAT_HISTORY_TABLE, conversation_item)
+        except Exception as e:
+            logger.warning(f"Failed to store conversation: {e}")
 
         return {
             'status': STATUS_SUCCESS,
             'query': query,
             'response': ai_response,
             'product_id': product_id,
-            'timestamp': generate_timestamp()
+            'conversation_id': conversation_id,
+            'timestamp': timestamp
         }
 
     except Exception as e:
@@ -682,6 +711,93 @@ Explanations:"""
         }
 
 
+def handle_get_conversations(event: Dict[str, Any]) -> Dict[str, Any]:
+    """GET /ai/conversations - List all conversations for a seller."""
+    try:
+        seller_id = event.get('seller_id', 'SELLER-001')  # Default for MVP
+        
+        # Scan chat history and scope to seller.
+        all_items = db_client.scan(CHAT_HISTORY_TABLE)
+        conversations = [
+            item for item in all_items
+            if item.get('type') == 'ai_conversation' and item.get('seller_id') == seller_id
+        ]
+        
+        # Group by conversation_id
+        conv_map = {}
+        for conv in conversations:
+            conv_id = conv.get('conversation_id')
+            if conv_id not in conv_map:
+                conv_map[conv_id] = {
+                    'id': conv_id,
+                    'title': conv.get('query', 'Untitled')[:50],
+                    'lastMessage': conv.get('timestamp'),
+                    'messageCount': 0
+                }
+            conv_map[conv_id]['messageCount'] += 1
+            # Update to latest timestamp
+            if conv.get('timestamp', '') > conv_map[conv_id]['lastMessage']:
+                conv_map[conv_id]['lastMessage'] = conv.get('timestamp')
+        
+        result = sorted(conv_map.values(), key=lambda x: x['lastMessage'], reverse=True)
+        
+        return {
+            'status': STATUS_SUCCESS,
+            'conversations': result
+        }
+    except Exception as e:
+        logger.exception(f"Error fetching conversations: {e}")
+        return {
+            'status': STATUS_FAILED,
+            'error': str(e)
+        }
+
+
+def handle_get_conversation_history(event: Dict[str, Any]) -> Dict[str, Any]:
+    """GET /ai/history/{conversationId} - Get conversation history."""
+    try:
+        conversation_id = event.get('conversation_id')
+        if not conversation_id:
+            raise ValueError("conversation_id is required")
+        
+        # Query this conversation directly by partition key.
+        messages = db_client.query(
+            CHAT_HISTORY_TABLE,
+            key_condition='conversation_id = :cid',
+            expression_values={':cid': conversation_id}
+        )
+        messages = [m for m in messages if m.get('type') == 'ai_conversation']
+        
+        # Sort by timestamp
+        messages.sort(key=lambda x: x.get('timestamp', ''))
+        
+        # Format for frontend
+        history = []
+        for msg in messages:
+            history.append({
+                'role': 'user',
+                'content': msg.get('query'),
+                'timestamp': msg.get('timestamp')
+            })
+            history.append({
+                'role': 'assistant',
+                'content': msg.get('response'),
+                'timestamp': msg.get('timestamp')
+            })
+        
+        return {
+            'status': STATUS_SUCCESS,
+            'conversation_id': conversation_id,
+            'messages': history
+        }
+    except Exception as e:
+        logger.exception(f"Error fetching conversation history: {e}")
+        return {
+            'status': STATUS_FAILED,
+            'error': str(e)
+        }
+
+
 # =============================================================================
 # LAMBDA ENTRY POINT
 # =============================================================================
@@ -691,19 +807,31 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     AWS Lambda entry point for AI Interface.
 
     Routes requests based on query_type:
-    - query: Natural language questions
-    - daily_summary: Daily AI summary
-    - onboarding: New seller onboarding
-    - strategy: Strategic insights
-    - bulk_explanation: Batch explanations
+    - query: Natural language questions (POST)
+    - daily_summary: Daily AI summary (POST)
+    - onboarding: New seller onboarding (POST)
+    - strategy: Strategic insights (POST)
+    - bulk_explanation: Batch explanations (POST)
+    - conversations: List conversations (GET)
+    - history: Get conversation history (GET)
     """
     logger.info(f"AI Interface invoked with event: {json.dumps(event, default=str)}")
 
     try:
         payload = event
+        method = event.get('requestContext', {}).get('http', {}).get('method', 'POST')
 
-        # Handle API Gateway HTTP API events where request data is in body.
-        if isinstance(event, dict) and 'body' in event:
+        # Handle GET requests
+        if method == 'GET':
+            path = event.get('rawPath', '')
+            if path == '/ai/conversations':
+                payload = {'query_type': 'conversations'}
+            elif path.startswith('/ai/history/'):
+                conversation_id = event.get('pathParameters', {}).get('conversationId')
+                payload = {'query_type': 'history', 'conversation_id': conversation_id}
+
+        # Handle POST requests (API Gateway HTTP API events)
+        elif isinstance(event, dict) and 'body' in event:
             body = event.get('body')
             if isinstance(body, str) and body:
                 payload = json.loads(body)
@@ -727,7 +855,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'daily_summary': handle_daily_summary,
             'onboarding': handle_onboarding,
             'strategy': handle_strategy_insights,
-            'bulk_explanation': handle_bulk_explanation
+            'bulk_explanation': handle_bulk_explanation,
+            'conversations': handle_get_conversations,
+            'history': handle_get_conversation_history
         }
 
         handler = handlers.get(query_type)
@@ -745,6 +875,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         return {
             'statusCode': 200 if result['status'] == STATUS_SUCCESS else 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
             'body': json.dumps(result, default=str)
         }
 
@@ -752,6 +886,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         logger.exception(f"Lambda handler error: {e}")
         return {
             'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
             'body': json.dumps({
                 'status': STATUS_FAILED,
                 'error': str(e),
