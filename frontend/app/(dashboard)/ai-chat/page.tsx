@@ -1,9 +1,13 @@
 "use client"
 
-import { Suspense } from "react"
+import { Suspense, useEffect } from "react"
 import { AIChat } from "@/components/chat/ai-chat"
 
 export default function AIChatPage() {
+  useEffect(() => {
+    console.info("[page] mounted /ai-chat")
+  }, [])
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 lg:px-8 h-[calc(100vh-10px)] flex flex-col">
       <div className="mb-6">

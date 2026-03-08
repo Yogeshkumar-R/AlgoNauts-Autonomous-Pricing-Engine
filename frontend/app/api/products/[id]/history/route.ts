@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { backendFetch, isBackendConnected } from "@/lib/backend"
-import { mockHistoricalPrices } from "@/lib/mock-data"
 import type { HistoricalPrice } from "@/lib/types"
 
 export async function GET(
@@ -10,12 +9,18 @@ export async function GET(
   const { id } = await params
   try {
     if (!isBackendConnected()) {
-      return NextResponse.json(mockHistoricalPrices)
+      return NextResponse.json(
+        { error: "Backend not configured" },
+        { status: 503 }
+      )
     }
     const data = await backendFetch<HistoricalPrice[]>(`/products/${id}/history`)
     return NextResponse.json(data)
   } catch (error) {
     console.error(`[api/products/${id}/history]`, error)
-    return NextResponse.json(mockHistoricalPrices)
+    return NextResponse.json(
+      { error: "Failed to fetch product history" },
+      { status: 502 }
+    )
   }
 }

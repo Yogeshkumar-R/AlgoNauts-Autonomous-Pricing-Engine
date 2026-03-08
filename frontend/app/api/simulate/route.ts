@@ -12,12 +12,10 @@ export async function POST(request: Request) {
     }
 
     if (!isBackendConnected()) {
-      // Mock simulation response
-      return NextResponse.json({
-        runId: `sim-${Date.now()}`,
-        executionArn: `arn:aws:states:ap-south-1:mock:execution:PricingPipeline:sim-${Date.now()}`,
-        status: "RUNNING",
-      } satisfies SimulateResponse)
+      return NextResponse.json(
+        { error: "Backend not configured" },
+        { status: 503 }
+      )
     }
 
     const data = await backendFetch<any>("/simulate", {
@@ -37,6 +35,6 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[api/simulate] Error:", error)
     const errorMessage = error instanceof Error ? error.message : "Simulation failed to start"
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+    return NextResponse.json({ error: errorMessage }, { status: 502 })
   }
 }

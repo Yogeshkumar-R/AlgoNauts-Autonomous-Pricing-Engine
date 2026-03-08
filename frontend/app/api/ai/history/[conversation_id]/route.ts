@@ -9,7 +9,10 @@ export async function GET(
 
     try {
         if (!isBackendConnected()) {
-            return NextResponse.json({ messages: [] })
+            return NextResponse.json(
+                { error: "Backend not configured" },
+                { status: 503 }
+            )
         }
 
         const data = await backendFetch(
@@ -25,8 +28,8 @@ export async function GET(
         console.error("[api/ai/history]", error)
 
         return NextResponse.json(
-            { messages: [] },
-            { status: 200 }
+            { error: "Failed to fetch conversation history" },
+            { status: 502 }
         )
     }
 }

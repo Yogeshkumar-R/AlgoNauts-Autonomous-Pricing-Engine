@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { KPICards } from "@/components/dashboard/kpi-cards"
 import { RevenueChart } from "@/components/dashboard/revenue-chart"
 import { RecentDecisions } from "@/components/dashboard/recent-decisions"
@@ -7,6 +8,10 @@ import { AlertsPanel } from "@/components/dashboard/alerts-panel"
 import { ConnectionBanner } from "@/components/connection-banner"
 
 export default function DashboardPage() {
+  useEffect(() => {
+    console.info("[page] mounted /dashboard")
+  }, [])
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 lg:px-8">
       <ConnectionBanner />
