@@ -60,10 +60,10 @@ function preprocessText(text: string): string {
   // Trim leading/trailing whitespace
   processed = processed.trim()
   
-  console.log('========== PREPROCESSED TEXT ==========')
-  console.log(processed)
-  console.log('=======================================')
-  
+  // console.log('========== PREPROCESSED TEXT ==========')
+  // console.log(processed)
+  // console.log('=======================================')
+
   return processed
 }
 
@@ -71,10 +71,10 @@ function preprocessText(text: string): string {
  * Parse markdown text into React elements
  */
 function parseMarkdown(text: string) {
-  console.log('========== ORIGINAL TEXT ==========')
-  console.log(text)
-  console.log('===================================')
-  
+  // console.log('========== ORIGINAL TEXT ==========')
+  // console.log(text)
+  // console.log('===================================')
+
   // Preprocess to add line breaks
   const preprocessed = preprocessText(text)
   
@@ -111,7 +111,7 @@ function parseMarkdown(text: string) {
     }
   }
   
-  console.log('========== PROCESSING LINES ==========')
+  // console.log('========== PROCESSING LINES ==========')
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
@@ -123,14 +123,14 @@ function parseMarkdown(text: string) {
       continue
     }
     
-    console.log(`Line ${i}: "${line}"`)
+    // console.log(`Line ${i}: "${line}"`)
     
     // Check for table
     if (line.startsWith('|') && line.endsWith('|')) {
       flushList()
       inTable = true
       tableLines.push(line)
-      console.log(`  → TABLE LINE`)
+      // console.log(`  → TABLE LINE`)
       continue
     } else if (inTable) {
       flushTable()
@@ -139,7 +139,7 @@ function parseMarkdown(text: string) {
     // Headings
     if (line.startsWith('####')) {
       flushList()
-      console.log(`  → H4 HEADING`)
+      // console.log(`  → H4 HEADING`)
       elements.push(
         <h4 key={`h4-${i}`} className="font-semibold text-card-foreground mt-3 mb-1.5 first:mt-0 text-sm">
           {parseInline(line.replace(/^####\s*/, ''))}
@@ -150,7 +150,7 @@ function parseMarkdown(text: string) {
     
     if (line.startsWith('###')) {
       flushList()
-      console.log(`  → H3 HEADING`)
+      // console.log(`  → H3 HEADING`)
       elements.push(
         <h3 key={`h3-${i}`} className="font-semibold text-card-foreground mt-3 mb-1.5 first:mt-0 text-sm">
           {parseInline(line.replace(/^###\s*/, ''))}
@@ -161,7 +161,7 @@ function parseMarkdown(text: string) {
     
     if (line.startsWith('##')) {
       flushList()
-      console.log(`  → H2 HEADING`)
+      // console.log(`  → H2 HEADING`)
       elements.push(
         <h2 key={`h2-${i}`} className="font-semibold text-card-foreground mt-3 mb-1.5 first:mt-0 text-base">
           {parseInline(line.replace(/^##\s*/, ''))}
@@ -173,7 +173,7 @@ function parseMarkdown(text: string) {
     // Horizontal rule
     if (line === '---' || line === '***' || line === '___') {
       flushList()
-      console.log(`  → HORIZONTAL RULE`)
+      // console.log(`  → HORIZONTAL RULE`)
       elements.push(<hr key={`hr-${i}`} className="my-4 border-border" />)
       continue
     }
@@ -181,7 +181,7 @@ function parseMarkdown(text: string) {
     // Unordered list
     if (line.match(/^[-*]\s/)) {
       const content = line.replace(/^[-*]\s/, '')
-      console.log(`  → LIST ITEM (UL): "${content}"`)
+      // console.log(`  → LIST ITEM (UL): "${content}"`)
       if (!currentList || currentList.type !== 'ul') {
         flushList()
         currentList = { type: 'ul', items: [] }
@@ -193,7 +193,7 @@ function parseMarkdown(text: string) {
     // Ordered list
     if (line.match(/^\d+\.\s/)) {
       const content = line.replace(/^\d+\.\s/, '')
-      console.log(`  → LIST ITEM (OL): "${content}"`)
+      // console.log(`  → LIST ITEM (OL): "${content}"`)
       if (!currentList || currentList.type !== 'ol') {
         flushList()
         currentList = { type: 'ol', items: [] }
@@ -204,7 +204,7 @@ function parseMarkdown(text: string) {
     
     // Regular paragraph
     flushList()
-    console.log(`  → PARAGRAPH`)
+    // console.log(`  → PARAGRAPH`)
     elements.push(
       <p key={`p-${i}`} className="mb-2 last:mb-0 text-muted-foreground leading-relaxed text-sm font-normal">
         {parseInline(line)}
@@ -216,7 +216,7 @@ function parseMarkdown(text: string) {
   flushList()
   flushTable()
   
-  console.log(`========== GENERATED ${elements.length} ELEMENTS ==========`)
+  // console.log(`========== GENERATED ${elements.length} ELEMENTS ==========`)
   
   return elements
 }
@@ -390,7 +390,7 @@ export function AIChat() {
 
       } catch (err) {
 
-        console.error("Failed to load conversation history", err)
+        // console.error("Failed to load conversation history", err)
 
       }
 
@@ -451,7 +451,7 @@ export function AIChat() {
 
     } catch (err) {
 
-      console.error(err)
+      // console.error(err)
 
       const errorMsg: ChatMessage = {
         id: `e-${Date.now()}`,

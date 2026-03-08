@@ -13,7 +13,7 @@ export async function GET() {
     const data = await backendFetch<Alert[]>("/alerts")
     return NextResponse.json(data)
   } catch (error) {
-    console.error("[api/alerts]", error)
+    // console.error("[api/alerts]", error)
     return NextResponse.json(
       { error: "Failed to fetch alerts" },
       { status: 502 }

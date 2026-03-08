@@ -13,7 +13,7 @@ export async function GET() {
     const data = await backendFetch<Product[]>("/products")
     return NextResponse.json(data)
   } catch (error) {
-    console.error("[api/products]", error)
+    // console.error("[api/products]", error)
     return NextResponse.json(
       { error: "Failed to fetch products" },
       { status: 502 }

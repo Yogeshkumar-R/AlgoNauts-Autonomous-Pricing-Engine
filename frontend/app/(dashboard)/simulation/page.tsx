@@ -5,7 +5,7 @@ import { SimulationControl } from "@/components/simulation/simulation-control"
 
 export default function SimulationPage() {
   useEffect(() => {
-    console.info("[page] mounted /simulation")
+    // console.info("[page] mounted /simulation")
   }, [])
 
   return (

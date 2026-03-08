@@ -17,7 +17,7 @@ export async function GET(
     const data = await backendFetch<HistoricalPrice[]>(`/products/${id}/history`)
     return NextResponse.json(data)
   } catch (error) {
-    console.error(`[api/products/${id}/history]`, error)
+    // console.error(`[api/products/${id}/history]`, error)
     return NextResponse.json(
       { error: "Failed to fetch product history" },
       { status: 502 }

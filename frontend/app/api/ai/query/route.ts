@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     })
     return NextResponse.json(data)
   } catch (error) {
-    console.error("[api/ai/query]", error)
+    // console.error("[api/ai/query]", error)
     return NextResponse.json(
       { error: "Failed to query AI service" },
       { status: 502 }

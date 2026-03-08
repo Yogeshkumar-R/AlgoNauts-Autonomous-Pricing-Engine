@@ -17,7 +17,7 @@ export async function GET() {
     return NextResponse.json(data)
 
   } catch (error) {
-    console.error("[api/ai/conversations]", error)
+    // console.error("[api/ai/conversations]", error)
 
     return NextResponse.json(
       { error: "Failed to fetch conversations" },

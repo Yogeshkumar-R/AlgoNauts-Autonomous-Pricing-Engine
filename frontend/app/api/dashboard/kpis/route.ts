@@ -13,7 +13,7 @@ export async function GET() {
     const data = await backendFetch<KPIData>("/dashboard/kpis")
     return NextResponse.json(data)
   } catch (error) {
-    console.error("[api/dashboard/kpis]", error)
+    // console.error("[api/dashboard/kpis]", error)
     return NextResponse.json(
       { error: "Failed to fetch dashboard KPIs" },
       { status: 502 }

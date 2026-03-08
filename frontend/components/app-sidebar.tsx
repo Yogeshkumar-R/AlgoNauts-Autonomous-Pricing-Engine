@@ -46,7 +46,7 @@ export function AppSidebar() {
           setConversations(res.conversations)
         }
       } catch (err) {
-        console.error("Failed to load conversations", err)
+        // console.error("Failed to load conversations", err)
       }
     }
 

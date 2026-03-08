@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     })
     return NextResponse.json(data)
   } catch (error) {
-    console.error("[api/seed]", error)
+    // console.error("[api/seed]", error)
     return NextResponse.json({ error: "Seed operation failed" }, { status: 500 })
   }
 }

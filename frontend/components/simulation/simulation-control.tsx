@@ -76,7 +76,7 @@ export function SimulationControl() {
       toast.success("Simulation completed successfully")
     } catch (error) {
       toast.error("Simulation failed. Please try again.")
-      console.error("[simulation]", error)
+      // console.error("[simulation]", error)
     } finally {
       setIsRunning(false)
     }

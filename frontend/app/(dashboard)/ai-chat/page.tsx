@@ -5,7 +5,7 @@ import { AIChat } from "@/components/chat/ai-chat"
 
 export default function AIChatPage() {
   useEffect(() => {
-    console.info("[page] mounted /ai-chat")
+    // console.info("[page] mounted /ai-chat")
   }, [])
 
   return (

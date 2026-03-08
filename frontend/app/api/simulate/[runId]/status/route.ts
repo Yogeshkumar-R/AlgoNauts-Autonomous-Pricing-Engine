@@ -13,7 +13,7 @@ export async function GET(
     )
     return NextResponse.json(data)
   } catch (error) {
-    console.error(`[api/simulate/${runId}/status]`, error)
+    // console.error(`[api/simulate/${runId}/status]`, error)
     return NextResponse.json({ error: "Failed to get simulation status" }, { status: 500 })
   }
 }

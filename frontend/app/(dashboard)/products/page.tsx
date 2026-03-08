@@ -5,7 +5,7 @@ import { ProductsTable } from "@/components/products/products-table"
 
 export default function ProductsPage() {
   useEffect(() => {
-    console.info("[page] mounted /products")
+    // console.info("[page] mounted /products")
   }, [])
 
   return (
