@@ -19,7 +19,7 @@ export function LandingHero() {
 
       <p className="mx-auto mt-5 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground md:text-lg">
         APE uses AWS Step Functions and Amazon Bedrock to continuously
-        monitor competitors, adjust margins, and protect your profit --
+        monitor competitors, adjust margins, and protect your profit -
         fully autonomously.
       </p>
 
