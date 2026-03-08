@@ -51,8 +51,8 @@ export async function POST(request: Request) {
         query_type: "query",
         seller_id: "SELLER-001",
         query: sanitizedQuery,
-        conversationId: body.conversationId,
-        context: body.context,
+        conversation_id: body.conversation_id, // Use camelCase from the request body
+        context: body.context, // Assuming context is also passed
       }),
     })
     return NextResponse.json(data)
