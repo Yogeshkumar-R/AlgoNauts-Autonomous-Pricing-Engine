@@ -33,15 +33,15 @@ const kpiConfig = [
     deltaFormat: (v: number) => `+${(v || 0).toFixed(1)}%`,
     deltaSuffix: " vs yesterday",
   },
-  {
-    key: "aiConfidence" as const,
-    label: "AI Confidence",
-    icon: Brain,
-    format: (v: number) => `${(v || 0).toFixed(1)}%`,
-    deltaKey: "confidenceDelta" as const,
-    deltaFormat: (v: number) => `+${(v || 0).toFixed(1)}%`,
-    deltaSuffix: " improvement",
-  },
+  // {
+  //   key: "aiConfidence" as const,
+  //   label: "AI Confidence",
+  //   icon: Brain,
+  //   format: (v: number) => `${(v || 0).toFixed(1)}%`,
+  //   deltaKey: "confidenceDelta" as const,
+  //   deltaFormat: (v: number) => `+${(v || 0).toFixed(1)}%`,
+  //   deltaSuffix: " improvement",
+  // },
 ]
 
 export function KPICards() {
@@ -49,8 +49,8 @@ export function KPICards() {
 
   if (isLoading || !data) {
     return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
           <div key={i} className="rounded-xl border border-border bg-card p-5">
             <Skeleton className="mb-3 h-4 w-24" />
             <Skeleton className="mb-2 h-8 w-20" />
@@ -62,7 +62,7 @@ export function KPICards() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {kpiConfig.map((kpi) => {
         const value = data[kpi.key]
         const delta = data[kpi.deltaKey]

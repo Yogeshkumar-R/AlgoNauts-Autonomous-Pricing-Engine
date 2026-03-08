@@ -56,6 +56,19 @@ const statusConfig = {
   info: { icon: Info, color: "text-primary", label: "Info" },
 }
 
+// Define payload types
+interface PayloadData {
+  input_data?: {
+    current_price?: number
+  }
+  output_data?: {
+    recommended_price?: number
+  }
+  oldPrice?: number
+  newPrice?: number
+  [key: string]: any
+}
+
 export function DecisionTimeline() {
   const { data: entries, isLoading } = useDecisionLog()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
@@ -86,6 +99,11 @@ export function DecisionTimeline() {
           const isExpanded = expanded[entry.id]
           const TypeIcon = type.icon
           const StatusIcon = status.icon
+          
+          // Type assertion for payload
+          const payload = entry.payload as PayloadData
+          const oldPrice = Number(payload?.input_data?.current_price ?? payload?.oldPrice ?? 0).toFixed(2)
+          const newPrice = Number(payload?.output_data?.recommended_price ?? payload?.newPrice ?? 0).toFixed(2)
 
           return (
             <div key={entry.id} className="relative pl-12">
@@ -127,9 +145,19 @@ export function DecisionTimeline() {
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-xs font-medium text-muted-foreground">Payload</span>
                     </div>
-                    <pre className="overflow-x-auto rounded-lg bg-secondary/50 p-3 text-xs font-mono text-muted-foreground leading-relaxed">
+                    <div className="grid grid-cols-2 gap-4 mb-3">
+                      <div className="rounded-lg bg-secondary/50 p-3">
+                        <span className="mb-1 block text-xs text-muted-foreground">Old Price</span>
+                        <span className="font-mono text-sm font-medium line-through opacity-70">₹{oldPrice}</span>
+                      </div>
+                      <div className="rounded-lg bg-secondary/50 p-3">
+                        <span className="mb-1 block text-xs text-muted-foreground">New Price</span>
+                        <span className="font-mono text-sm font-medium text-primary">₹{newPrice}</span>
+                      </div>
+                    </div>
+                    {/* <pre className="overflow-x-auto rounded-lg bg-secondary/50 p-3 text-xs font-mono text-muted-foreground leading-relaxed">
                       {JSON.stringify(entry.payload, null, 2)}
-                    </pre>
+                    </pre> */}
                   </div>
                 )}
               </div>

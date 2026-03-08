@@ -27,8 +27,8 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/products", label: "Products", icon: Package },
   { href: "/ai-chat", label: "AI Pricing Assistant", icon: MessageSquare },
-  { href: "/decisions", label: "Decision Log", icon: ScrollText },
   { href: "/simulation", label: "Simulation", icon: FlaskConical },
+  { href: "/decisions", label: "Decision Log", icon: ScrollText }
 ]
 
 export function AppSidebar() {
