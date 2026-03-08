@@ -21,6 +21,7 @@ Globals:
         PRODUCTS_TABLE: !Ref ProductsTable
         DECISIONS_TABLE: !Ref DecisionsTable
         CORRECTIONS_TABLE: !Ref CorrectionsTable
+        CHAT_HISTORY_TABLE: autonomous-pricing-chat-history
         MIN_MARGIN_PERCENT: '5.0'
         MAX_PRICE_DROP_PERCENT: '25.0'
         DEVIATION_THRESHOLD_PERCENT: '20.0'
@@ -208,7 +209,7 @@ Resources:
         Variables:
           STATE_MACHINE_ARN: !Ref PricingStateMachine
       Policies:
-        - DynamoDBReadPolicy:
+        - DynamoDBCrudPolicy:
             TableName: !Ref ProductsTable
         - Statement:
             Effect: Allow
@@ -385,6 +386,17 @@ Resources:
         - Statement:
             Effect: Allow
             Action:
+              - dynamodb:PutItem
+              - dynamodb:GetItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:UpdateItem
+            Resource:
+              - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/autonomous-pricing-chat-history'
+              - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/autonomous-pricing-chat-history/index/*'
+        - Statement:
+            Effect: Allow
+            Action:
               - bedrock:InvokeModel
             Resource: "*"
       Events:
@@ -394,6 +406,18 @@ Resources:
             ApiId: !Ref PricingAPI
             Path: /ai/{query_type}
             Method: POST
+        GetConversations:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PricingAPI
+            Path: /ai/conversations
+            Method: GET
+        GetConversationHistory:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PricingAPI
+            Path: /ai/history/{conversationId}
+            Method: GET
         DailySummarySchedule:
           Type: Schedule
           Properties:
@@ -546,7 +570,7 @@ Outputs:
     Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/simulate'
 
   AIQueryEndpoint:
-    Description: POST to ask the AI pricing manager a question
+    Description: POST to ask the AI Pricing Manager a question
     Value: !Sub 'https://${PricingAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/ai/query'
 
   IngestMarketDataEndpoint:

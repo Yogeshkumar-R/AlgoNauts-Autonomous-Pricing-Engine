@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useProducts } from "@/lib/hooks"
 import { cn } from "@/lib/utils"
+import { marginToneClass } from "@/lib/pricing-thresholds"
 import { ProductDrawer } from "./product-drawer"
 import type { Product } from "@/lib/types"
 
@@ -140,7 +141,7 @@ export function ProductsTable() {
                     {"₹"}{product.competitorPrice}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={cn("text-sm font-medium", product.margin >= 50 ? "text-success" : product.margin >= 30 ? "text-warning" : "text-destructive")}>
+                    <span className={cn("text-sm font-medium", marginToneClass(product.margin))}>
                       {product.margin}%
                     </span>
                   </td>

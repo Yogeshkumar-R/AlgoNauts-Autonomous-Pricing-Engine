@@ -425,12 +425,28 @@ def run_correction(event: Dict[str, Any]) -> Dict[str, Any]:
                 },
                 'pricing_strategy': 'ai_corrected',
                 'source_correction_id': correction_id,
-                'status': 'pending_validation',
+                'status': 'approved',
                 'ai_confidence': ai_response.get('confidence', 'low'),
+                'applied_at': timestamp,
                 'created_at': timestamp
             }
 
             db_client.put_item(DECISIONS_TABLE, new_decision)
+
+            # Apply corrected price so product listing reflects latest correction.
+            db_client.update_item(
+                PRODUCTS_TABLE,
+                {'product_id': product_id},
+                'SET current_price = :price, price_updated_at = :timestamp, '
+                'last_decision_id = :decision_id, #status = :product_status, updated_at = :timestamp',
+                {
+                    ':price': round(float(revised_price), 2),
+                    ':timestamp': timestamp,
+                    ':decision_id': new_decision_id,
+                    ':product_status': 'corrected'
+                },
+                expression_attribute_names={'#status': 'status'}
+            )
 
             logger.info(f"Created new AI-corrected decision {new_decision_id}")
 

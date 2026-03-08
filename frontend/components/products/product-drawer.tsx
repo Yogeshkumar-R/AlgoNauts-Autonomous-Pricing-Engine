@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useHistoricalPrices, useProductDetail } from "@/lib/hooks"
+import { marginToneClass } from "@/lib/pricing-thresholds"
 import { cn } from "@/lib/utils"
 import type { Product } from "@/lib/types"
 
@@ -70,7 +71,7 @@ export function ProductDrawer({ product, open, onOpenChange }: ProductDrawerProp
               </div>
               <div className="rounded-lg border border-border bg-secondary/30 p-3">
                 <div className="text-xs text-muted-foreground">Margin</div>
-                <div className="text-lg font-semibold text-success">{product.margin}%</div>
+                <div className={cn("text-lg font-semibold", marginToneClass(product.margin))}>{product.margin}%</div>
               </div>
             </div>
 

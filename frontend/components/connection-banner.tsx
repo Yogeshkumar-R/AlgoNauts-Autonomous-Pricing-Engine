@@ -8,7 +8,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 export function ConnectionBanner() {
-  const isConnected = !!process.env.NEXT_PUBLIC_API_BASE || !!process.env.NEXT_PUBLIC_API_URL
+  const isConnected = !!process.env.NEXT_PUBLIC_API_BASE
   const [seeding, setSeeding] = useState(false)
 
   async function handleSeed() {

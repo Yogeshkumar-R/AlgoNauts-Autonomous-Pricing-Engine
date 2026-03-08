@@ -35,7 +35,8 @@ export async function POST(request: Request) {
       status: "RUNNING"
     } satisfies SimulateResponse)
   } catch (error) {
-    console.error("[api/simulate]", error)
-    return NextResponse.json({ error: "Simulation failed to start" }, { status: 500 })
+    console.error("[api/simulate] Error:", error)
+    const errorMessage = error instanceof Error ? error.message : "Simulation failed to start"
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

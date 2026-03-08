@@ -26,7 +26,7 @@ type Conversation = {
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/products", label: "Products", icon: Package },
-  { href: "/ai-chat", label: "AI Pricing Assistant", icon: MessageSquare },
+  { href: "/ai-chat", label: "PRIME", icon: MessageSquare },
   { href: "/simulation", label: "Simulation", icon: FlaskConical },
   { href: "/decisions", label: "Decision Log", icon: ScrollText }
 ]

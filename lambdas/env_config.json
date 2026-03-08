@@ -2,6 +2,7 @@
   "PRODUCTS_TABLE": "autonomous-pricing-products",
   "DECISIONS_TABLE": "autonomous-pricing-decisions",
   "CORRECTIONS_TABLE": "autonomous-pricing-corrections",
+  "CHAT_HISTORY_TABLE": "autonomous-pricing-chat-history",
   "MIN_MARGIN_PERCENT": "5.0",
   "MAX_PRICE_DROP_PERCENT": "25.0",
   "DEVIATION_THRESHOLD_PERCENT": "20.0",

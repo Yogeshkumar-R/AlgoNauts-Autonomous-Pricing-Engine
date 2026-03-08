@@ -82,6 +82,18 @@ def generate_synthetic_event(product: Dict[str, Any], scenario: str) -> Dict[str
     competitor_price = round(current_price * price_factor, 2)
     demand_factor = round(random.uniform(*cfg['demand_factor_range']), 2)
 
+    # Update product in DynamoDB with new market conditions
+    db_client.update_item(
+        PRODUCTS_TABLE,
+        {'product_id': product['product_id']},
+        'SET competitor_price = :cp, demand_factor = :df, updated_at = :ua',
+        {
+            ':cp': competitor_price,
+            ':df': demand_factor,
+            ':ua': generate_timestamp()
+        }
+    )
+
     return {
         'product_id': product['product_id'],
         'competitor_price': competitor_price,
@@ -124,6 +136,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         scenario = body.get('scenario', 'random')
         product_id = body.get('product_id')   # optional — pick specific product
+        
+        logger.info(f"Received scenario: {scenario}")
+        logger.info(f"Request body: {json.dumps(body)}")
 
         # Get product
         if product_id:

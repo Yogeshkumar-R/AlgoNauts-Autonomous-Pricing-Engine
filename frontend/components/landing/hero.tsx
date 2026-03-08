@@ -32,7 +32,7 @@ export function LandingHero() {
           <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </Link>
         <Link
-          href="/dashboard/simulation"
+          href="/simulation"
           className="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary"
         >
           Run a Simulation

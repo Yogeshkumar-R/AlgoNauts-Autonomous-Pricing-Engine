@@ -8,6 +8,7 @@ import os
 PRODUCTS_TABLE = os.environ.get('PRODUCTS_TABLE', 'products')
 DECISIONS_TABLE = os.environ.get('DECISIONS_TABLE', 'pricing_decisions')
 CORRECTIONS_TABLE = os.environ.get('CORRECTIONS_TABLE', 'price_corrections')
+CHAT_HISTORY_TABLE = os.environ.get('CHAT_HISTORY_TABLE', 'autonomous-pricing-chat-history')
 
 # Pricing Constants
 MIN_MARGIN_PERCENT = float(os.environ.get('MIN_MARGIN_PERCENT', '5.0'))  # Minimum 5% margin

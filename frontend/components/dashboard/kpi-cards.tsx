@@ -47,6 +47,13 @@ const kpiConfig = [
 export function KPICards() {
   const { data, isLoading } = useKPIs()
 
+  const toNumberOrNull = (value: unknown): number | null => {
+    if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
+      return null
+    }
+    return value
+  }
+
   if (isLoading || !data) {
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -64,8 +71,8 @@ export function KPICards() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {kpiConfig.map((kpi) => {
-        const value = data[kpi.key]
-        const delta = data[kpi.deltaKey]
+        const value = toNumberOrNull(data[kpi.key])
+        const delta = toNumberOrNull(data[kpi.deltaKey])
         return (
           <div
             key={kpi.key}
@@ -80,12 +87,16 @@ export function KPICards() {
                 </div>
               </div>
               <div className="mb-1 text-2xl font-bold tracking-tight text-card-foreground">
-                {kpi.format(value)}
+                {value === null ? "N/A" : kpi.format(value)}
               </div>
-              <div className={cn("flex items-center gap-1 text-xs", delta >= 0 ? "text-success" : "text-destructive")}>
-                <span>{kpi.deltaFormat(delta)}</span>
-                <span className="text-muted-foreground">{kpi.deltaSuffix}</span>
-              </div>
+              {delta === null ? (
+                <div className="text-xs text-muted-foreground">No baseline yet</div>
+              ) : (
+                <div className={cn("flex items-center gap-1 text-xs", delta >= 0 ? "text-success" : "text-destructive")}>
+                  <span>{kpi.deltaFormat(delta)}</span>
+                  <span className="text-muted-foreground">{kpi.deltaSuffix}</span>
+                </div>
+              )}
             </div>
           </div>
         )

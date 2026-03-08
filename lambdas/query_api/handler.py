@@ -74,15 +74,29 @@ def get_dashboard_kpis():
         
         avg_margin = total_margin / max(active_products, 1)
         
+        # Calculate AI confidence from recent decisions with corrections
+        decisions = db.scan(DECISIONS_TABLE)
+        corrections = db.scan(CORRECTIONS_TABLE)
+        
+        if decisions:
+            # Count decisions that were NOT corrected (i.e., AI was right)
+            corrected_decision_ids = {c.get('decision_id') for c in corrections}
+            correct_decisions = [d for d in decisions if d.get('decision_id') not in corrected_decision_ids]
+            
+            # AI confidence = % of decisions that didn't need correction
+            ai_confidence = (len(correct_decisions) / len(decisions)) * 100
+        else:
+            ai_confidence = None  # No data yet - don't show misleading number
+        
         result = {
             'activeProducts': active_products,
             'avgMargin': round(avg_margin, 1),
             'revenueToday': round(revenue_today, 2),
-            'aiConfidence': 85.0,
-            'activeProductsDelta': 2,
-            'avgMarginDelta': 1.2,
-            'revenueDelta': 8.5,
-            'confidenceDelta': 2.1
+            'aiConfidence': round(ai_confidence, 1) if ai_confidence is not None else None,
+            'activeProductsDelta': None,  # Requires historical data
+            'avgMarginDelta': None,  # Requires historical data
+            'revenueDelta': None,  # Requires historical data
+            'confidenceDelta': None  # Requires historical data
         }
         
         return {'statusCode': 200, 'body': json.dumps(result)}
@@ -155,21 +169,56 @@ def get_alerts():
 
 
 def get_revenue_analytics():
-    """GET /analytics/revenue"""
+    """GET /analytics/revenue - Calculate actual revenue from pricing decisions"""
     try:
-        result = []
-        base_revenue = 42000
-        base_competitor = 38000
+        decisions = db.scan(DECISIONS_TABLE)
+        products = db.scan(PRODUCTS_TABLE)
         
-        for i in range(7):
-            date = (datetime.now() - timedelta(days=6-i)).strftime('%Y-%m-%d')
-            result.append({
+        # Group decisions by date
+        revenue_by_date = {}
+        
+        for decision in decisions:
+            timestamp = decision.get('timestamp', '')
+            if not timestamp:
+                continue
+            
+            date = timestamp.split('T')[0]  # Extract date from ISO timestamp
+            
+            if date not in revenue_by_date:
+                revenue_by_date[date] = {'our_revenue': 0, 'competitor_revenue': 0}
+            
+            # Get product details
+            product_id = decision.get('product_id')
+            product = next((p for p in products if p.get('product_id') == product_id), None)
+            
+            if product:
+                # Calculate revenue from this decision
+                new_price = float(decision.get('output_data', {}).get('recommended_price', 0))
+                competitor_price = float(product.get('competitor_price', 0))
+                demand_factor = float(product.get('demand_factor', 1.0))
+                
+                # Estimate daily sales (simplified: demand_factor * 10 units)
+                estimated_units = demand_factor * 10
+                
+                revenue_by_date[date]['our_revenue'] += new_price * estimated_units
+                revenue_by_date[date]['competitor_revenue'] += competitor_price * estimated_units
+        
+        # If no decisions yet, return empty array
+        if not revenue_by_date:
+            return {'statusCode': 200, 'body': json.dumps([])}
+        
+        # Convert to array and sort by date
+        result = [
+            {
                 'date': date,
-                'revenue': base_revenue + i * 500,
-                'competitor': base_competitor + i * 400
-            })
+                'revenue': round(data['our_revenue'], 2),
+                'competitor': round(data['competitor_revenue'], 2)
+            }
+            for date, data in sorted(revenue_by_date.items())
+        ]
         
-        return {'statusCode': 200, 'body': json.dumps(result)}
+        # Return last 7 days only
+        return {'statusCode': 200, 'body': json.dumps(result[-7:])}
     except Exception as e:
         logger.exception(f"Error: {e}")
         return {'statusCode': 500, 'body': json.dumps({'error': str(e)})}
@@ -201,7 +250,7 @@ def get_simulation_status(execution_arn: str):
         return {'statusCode': 200, 'body': json.dumps(result)}
     except Exception as e:
         logger.exception(f"Error: {e}")
-        return {'statusCode': 500, 'body': json.dumps({'error': str(e)})}}
+        return {'statusCode': 500, 'body': json.dumps({'error': str(e)})}
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

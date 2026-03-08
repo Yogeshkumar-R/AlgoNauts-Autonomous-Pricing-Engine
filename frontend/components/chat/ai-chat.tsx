@@ -19,7 +19,7 @@ const quickPrompts = [
 const welcomeMessage: ChatMessage = {
   id: `welcome`,
   role: "assistant",
-  content: "Hello! I'm your AI Pricing Assistant. How can I help you today?",
+  content: "Hello! I'm your PRIME. How can I help you today?",
   timestamp: new Date().toISOString(),
 }
 
@@ -503,7 +503,7 @@ export function AIChat() {
         </div>
         <div>
           <h3 className="text-sm font-semibold text-card-foreground">
-            AI Pricing Assistant
+            PRIME
           </h3>
           <p className="text-xs text-muted-foreground">
             Powered by Amazon Bedrock
