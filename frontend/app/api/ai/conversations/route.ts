@@ -1,0 +1,24 @@
+import { NextResponse } from "next/server"
+import { backendFetch, isBackendConnected } from "@/lib/backend"
+
+export async function GET() {
+  try {
+    if (!isBackendConnected()) {
+      return NextResponse.json({ conversations: [] })
+    }
+
+    const data = await backendFetch("/ai/conversations", {
+      method: "GET",
+    })
+
+    return NextResponse.json(data)
+
+  } catch (error) {
+    console.error("[api/ai/conversations]", error)
+
+    return NextResponse.json(
+      { conversations: [] },
+      { status: 200 }
+    )
+  }
+}

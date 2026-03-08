@@ -1,0 +1,32 @@
+{
+  "query_type": "onboarding",
+  "seller_id": "SELLER-001",
+  "seller_info": {
+    "business_name": "Chennai Mobiles",
+    "business_type": "Electronics & Mobile Accessories",
+    "experience": "Beginner"
+  },
+  "products": [
+    {
+      "product_name": "iPhone 15 Silicone Case",
+      "product_id": "PROD-001",
+      "cost_price": 150,
+      "current_price": 299,
+      "competitor_price": 349
+    },
+    {
+      "product_name": "Samsung S24 Glass Protector",
+      "product_id": "PROD-002",
+      "cost_price": 80,
+      "current_price": 199,
+      "competitor_price": 249
+    },
+    {
+      "product_name": "USB-C Fast Charger 65W",
+      "product_id": "PROD-003",
+      "cost_price": 450,
+      "current_price": 799,
+      "competitor_price": 899
+    }
+  ]
+}

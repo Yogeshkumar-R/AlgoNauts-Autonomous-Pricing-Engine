@@ -1,0 +1,2 @@
+# Market Processor Lambda Dependencies
+boto3>=1.26.0

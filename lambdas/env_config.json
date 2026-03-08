@@ -1,0 +1,20 @@
+{
+  "PRODUCTS_TABLE": "autonomous-pricing-products",
+  "DECISIONS_TABLE": "autonomous-pricing-decisions",
+  "CORRECTIONS_TABLE": "autonomous-pricing-corrections",
+  "CHAT_HISTORY_TABLE": "autonomous-pricing-chat-history",
+  "MIN_MARGIN_PERCENT": "5.0",
+  "MAX_PRICE_DROP_PERCENT": "25.0",
+  "DEVIATION_THRESHOLD_PERCENT": "20.0",
+  "MANUAL_APPROVAL_PRICE_CHANGE_PERCENT": "20.0",
+  "MANUAL_APPROVAL_MIN_MARGIN_PERCENT": "8.0",
+  "BEDROCK_MODEL_ID": "us.amazon.nova-2-lite-v1:0",
+  "BEDROCK_REGION": "us-east-1",
+  "BEDROCK_GUARDRAIL_ID": "0eadjm61dgug",
+  "BEDROCK_GUARDRAIL_VERSION": "2",
+  "AWS_REGION": "us-east-1",
+  "LOG_LEVEL": "INFO",
+  "LANGSMITH_TRACING_V2": "true",
+  "LANGSMITH_PROJECT": "autonomous-pricing-engine",
+  "LANGSMITH_API_KEY": ""
+}

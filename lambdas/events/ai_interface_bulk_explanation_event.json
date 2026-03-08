@@ -1,0 +1,9 @@
+{
+  "query_type": "bulk_explanation",
+  "seller_id": "SELLER-001",
+  "decision_ids": [
+    "decision_PROD-001_2025-01-15T10-30-00",
+    "decision_PROD-002_2025-01-15T11-00-00",
+    "decision_PROD-003_2025-01-15T11-30-00"
+  ]
+}

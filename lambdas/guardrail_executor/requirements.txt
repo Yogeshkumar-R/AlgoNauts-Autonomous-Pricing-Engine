@@ -1,0 +1,2 @@
+# Guardrail Executor Lambda Dependencies
+boto3>=1.26.0

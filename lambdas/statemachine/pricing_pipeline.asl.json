@@ -1,0 +1,197 @@
+{
+    "Comment": "AlgoNauts Autonomous Pricing Pipeline — orchestrates market_processor → pricing_engine → guardrail_executor → monitoring_agent → correction_agent",
+    "StartAt": "ProcessMarketData",
+    "States": {
+        "ProcessMarketData": {
+            "Type": "Task",
+            "Resource": "${MarketProcessorFunctionArn}",
+            "Comment": "Update DynamoDB with synthetic competitor price and demand data",
+            "ResultPath": "$.market",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 2,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.error",
+                    "Next": "PipelineFailed"
+                }
+            ],
+            "Next": "RunPricingEngine"
+        },
+        "RunPricingEngine": {
+            "Type": "Task",
+            "Resource": "${PricingEngineFunctionArn}",
+            "Comment": "Calculate recommended price using deterministic logic (cost + GST + demand + competition)",
+            "Parameters": {
+                "product_id.$": "$.product_id",
+                "_pipeline_execution_id.$": "$$.Execution.Id",
+                "_sf_mode": true
+            },
+            "ResultPath": "$.pricing",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 2,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.error",
+                    "Next": "PipelineFailed"
+                }
+            ],
+            "Next": "ExecuteGuardrail"
+        },
+        "ExecuteGuardrail": {
+            "Type": "Task",
+            "Resource": "${GuardrailExecutorFunctionArn}",
+            "Comment": "Validate recommended price against margin floors, cost, and max price drop rules",
+            "Parameters": {
+                "product_id.$": "$.product_id",
+                "decision_id.$": "$.pricing.decision_id",
+                "auto_apply": true,
+                "_sf_mode": true
+            },
+            "ResultPath": "$.guardrail",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 2,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.error",
+                    "Next": "PipelineFailed"
+                }
+            ],
+            "Next": "GuardrailOutcome"
+        },
+        "GuardrailOutcome": {
+            "Type": "Choice",
+            "Comment": "Continue only when guardrail applied price automatically",
+            "Choices": [
+                {
+                    "Variable": "$.guardrail.action",
+                    "StringEquals": "price_applied",
+                    "Next": "RunMonitoring"
+                }
+            ],
+            "Default": "PipelineSucceeded"
+        },
+        "RunMonitoring": {
+            "Type": "Task",
+            "Resource": "${MonitoringAgentFunctionArn}",
+            "Comment": "Compare predicted vs simulated actual sales/margin — detect deviation",
+            "Parameters": {
+                "product_id.$": "$.product_id",
+                "decision_id.$": "$.pricing.decision_id",
+                "_sf_mode": true
+            },
+            "ResultPath": "$.monitoring",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 2,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.error",
+                    "Next": "PipelineFailed"
+                }
+            ],
+            "Next": "CheckDeviationThreshold"
+        },
+        "CheckDeviationThreshold": {
+            "Type": "Choice",
+            "Comment": "If deviation exceeds threshold, trigger AI-powered correction",
+            "Choices": [
+                {
+                    "Variable": "$.monitoring.threshold_exceeded",
+                    "BooleanEquals": true,
+                    "Next": "RunCorrectionAgent"
+                }
+            ],
+            "Default": "PipelineSucceeded"
+        },
+        "RunCorrectionAgent": {
+            "Type": "Task",
+            "Resource": "${CorrectionAgentFunctionArn}",
+            "Comment": "Call Bedrock Claude Haiku 4.5 to analyze deviation and recommend corrected price",
+            "Parameters": {
+                "correction_id.$": "$.monitoring.correction_id",
+                "product_id.$": "$.product_id",
+                "_sf_mode": true
+            },
+            "ResultPath": "$.correction",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException"
+                    ],
+                    "IntervalSeconds": 5,
+                    "MaxAttempts": 2,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.error",
+                    "Next": "PipelineFailed"
+                }
+            ],
+            "Next": "PipelineSucceeded"
+        },
+        "PipelineSucceeded": {
+            "Type": "Succeed",
+            "Comment": "Pricing pipeline completed successfully"
+        },
+        "PipelineFailed": {
+            "Type": "Fail",
+            "Comment": "Pipeline failed — check CloudWatch logs for details",
+            "Error": "PipelineError",
+            "Cause": "One or more pipeline stages failed"
+        }
+    }
+}

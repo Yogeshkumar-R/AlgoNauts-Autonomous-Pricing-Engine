@@ -1,0 +1,8 @@
+{
+  "product_id": "PROD-001",
+  "cost_price": 350.00,
+  "current_price": 549.00,
+  "competitor_price": 599.00,
+  "demand_factor": 1.2,
+  "gst_percent": 18.0
+}

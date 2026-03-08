@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IAM setup for Autonomous Pricing Hackathon Prototype
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: autonomous-pricing
+
+  TempPassword:
+    Type: String
+    NoEcho: true
+    Description: Temporary password (must be changed on first login)
+
+Resources:
+
+  # ===============================
+  # Developer Group
+  # ===============================
+
+  DeveloperGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: !Sub '${ProjectName}-developers'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator
+        - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+        - arn:aws:iam::aws:policy/AmazonBedrockFullAccess
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+        - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+  # ===============================
+  # IAM Users (Console Access)
+  # ===============================
+
+  UserRachana:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: rachana
+      Groups:
+        - !Ref DeveloperGroup
+      LoginProfile:
+        Password: !Ref TempPassword
+        PasswordResetRequired: true
+
+  UserRamaswamy:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: ramaswamy
+      Groups:
+        - !Ref DeveloperGroup
+      LoginProfile:
+        Password: !Ref TempPassword
+        PasswordResetRequired: true
+
+  UserGokul:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: gokul
+      Groups:
+        - !Ref DeveloperGroup
+      LoginProfile:
+        Password: !Ref TempPassword
+        PasswordResetRequired: true
+
+  # ===============================
+  # Lambda Runtime Role
+  # ===============================
+
+  AppServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-app-service-role'
+      Description: Runtime execution role for Lambda functions
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+      Policies:
+        - PolicyName: BedrockInvokeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: '*'
+        - PolicyName: EventBridgePutEvents
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - events:PutEvents
+                Resource: !Sub 'arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default'
+
+Outputs:
+  ConsoleLoginURL:
+    Description: AWS Console login URL
+    Value: !Sub 'https://${AWS::AccountId}.signin.aws.amazon.com/console'
+
+  AppServiceRoleArn:
+    Description: Lambda runtime role ARN
+    Value: !GetAtt AppServiceRole.Arn
