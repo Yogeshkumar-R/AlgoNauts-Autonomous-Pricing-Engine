@@ -9,7 +9,7 @@ import { ConnectionBanner } from "@/components/connection-banner"
 
 export default function DashboardPage() {
   useEffect(() => {
-    console.info("[page] mounted /dashboard")
+    // console.info("[page] mounted /dashboard")
   }, [])
 
   return (

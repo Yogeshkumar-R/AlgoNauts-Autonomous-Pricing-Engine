@@ -19,7 +19,7 @@ export async function GET() {
       return NextResponse.json(data)
     }
   } catch (error) {
-    console.error("[api/decisions/log]", error)
+    // console.error("[api/decisions/log]", error)
     return NextResponse.json(
       { error: "Failed to fetch decision log" },
       { status: 502 }

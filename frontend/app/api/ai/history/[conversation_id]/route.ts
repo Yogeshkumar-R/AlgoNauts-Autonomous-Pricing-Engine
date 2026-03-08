@@ -25,7 +25,7 @@ export async function GET(
         return NextResponse.json(data)
 
     } catch (error) {
-        console.error("[api/ai/history]", error)
+        // console.error("[api/ai/history]", error)
 
         return NextResponse.json(
             { error: "Failed to fetch conversation history" },

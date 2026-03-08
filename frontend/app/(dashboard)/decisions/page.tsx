@@ -5,7 +5,7 @@ import { DecisionTimeline } from "@/components/decisions/decision-timeline"
 
 export default function DecisionsPage() {
   useEffect(() => {
-    console.info("[page] mounted /decisions")
+    // console.info("[page] mounted /decisions")
   }, [])
 
   return (

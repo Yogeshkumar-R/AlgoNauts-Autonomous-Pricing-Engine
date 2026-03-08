@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     })
     return NextResponse.json(data)
   } catch (error) {
-    console.error("[api/ingest/market-data]", error)
+    // console.error("[api/ingest/market-data]", error)
     return NextResponse.json({ error: "Ingestion failed" }, { status: 500 })
   }
 }

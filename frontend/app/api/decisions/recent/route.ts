@@ -13,7 +13,7 @@ export async function GET() {
     const data = await backendFetch<PricingDecision[]>("/decisions/recent")
     return NextResponse.json(data)
   } catch (error) {
-    console.error("[api/decisions/recent]", error)
+    // console.error("[api/decisions/recent]", error)
     return NextResponse.json(
       { error: "Failed to fetch recent decisions" },
       { status: 502 }
