@@ -167,7 +167,7 @@ export function ProductsTable() {
         </div>
       </div>
 
-      <ProductDrawer product={selectedProduct} open={drawerOpen} onOpenChange={setDrawerOpen} />
+      {/* <ProductDrawer product={selectedProduct} open={drawerOpen} onOpenChange={setDrawerOpen} /> */}
     </>
   )
 }
