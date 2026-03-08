@@ -14,11 +14,10 @@ export async function POST(request: Request) {
     }
 
     if (!isBackendConnected()) {
-      return NextResponse.json({
-        success: true,
-        productId: body.productId,
-        priceUpdated: true,
-      } satisfies IngestMarketDataResponse)
+      return NextResponse.json(
+        { error: "Backend not configured" },
+        { status: 503 }
+      )
     }
 
     const data = await backendFetch<IngestMarketDataResponse>("/ingest/market-data", {

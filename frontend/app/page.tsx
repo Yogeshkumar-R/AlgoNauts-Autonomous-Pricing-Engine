@@ -4,6 +4,8 @@ import { LandingFeatures } from "@/components/landing/features"
 import { LandingCTA } from "@/components/landing/cta"
 
 export default function LandingPage() {
+  console.info("[page] render /")
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
       {/* Subtle radial glow */}

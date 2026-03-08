@@ -4,7 +4,10 @@ import { backendFetch, isBackendConnected } from "@/lib/backend"
 export async function GET() {
   try {
     if (!isBackendConnected()) {
-      return NextResponse.json({ conversations: [] })
+      return NextResponse.json(
+        { error: "Backend not configured" },
+        { status: 503 }
+      )
     }
 
     const data = await backendFetch("/ai/conversations", {
@@ -17,8 +20,8 @@ export async function GET() {
     console.error("[api/ai/conversations]", error)
 
     return NextResponse.json(
-      { conversations: [] },
-      { status: 200 }
+      { error: "Failed to fetch conversations" },
+      { status: 502 }
     )
   }
 }

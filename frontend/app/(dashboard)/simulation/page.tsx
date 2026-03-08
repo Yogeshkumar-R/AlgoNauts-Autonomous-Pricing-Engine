@@ -1,8 +1,13 @@
 "use client"
 
+import { useEffect } from "react"
 import { SimulationControl } from "@/components/simulation/simulation-control"
 
 export default function SimulationPage() {
+  useEffect(() => {
+    console.info("[page] mounted /simulation")
+  }, [])
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 lg:px-8">
       <div className="mb-6">

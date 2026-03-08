@@ -7,11 +7,10 @@ export async function POST(request: Request) {
     const body: SeedRequest = await request.json()
 
     if (!isBackendConnected()) {
-      return NextResponse.json({
-        success: true,
-        message: "Demo mode: mock data already loaded",
-        productsSeeded: 12,
-      } satisfies SeedResponse)
+      return NextResponse.json(
+        { error: "Backend not configured" },
+        { status: 503 }
+      )
     }
 
     const data = await backendFetch<SeedResponse>("/seed", {
