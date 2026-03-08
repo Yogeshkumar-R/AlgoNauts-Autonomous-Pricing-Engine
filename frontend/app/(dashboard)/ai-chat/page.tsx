@@ -1,5 +1,6 @@
 "use client"
 
+import { Suspense } from "react"
 import { AIChat } from "@/components/chat/ai-chat"
 
 export default function AIChatPage() {
@@ -15,7 +16,9 @@ export default function AIChatPage() {
       </div>
 
       <div className="flex-1 overflow-hidden">
-        <AIChat />
+        <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading chat...</div>}>
+          <AIChat />
+        </Suspense>
       </div>
     </div>
   )
